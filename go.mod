@@ -3,6 +3,7 @@ module github.com/xx4h/flaxx
 go 1.23.11
 
 require (
+	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/spf13/cobra v1.10.2
 	gopkg.in/yaml.v3 v3.0.1
 )
