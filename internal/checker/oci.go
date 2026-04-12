@@ -87,19 +87,23 @@ func parseOCIURL(repoURL, chartName string) (string, string, error) {
 	return registry, repository, nil
 }
 
-// fetchTags retrieves the tag list from an OCI registry, handling token-based auth.
+// fetchTags retrieves the full tag list from an OCI registry, handling
+// token-based auth and pagination via Link headers.
 func fetchTags(client *http.Client, registry, repository string) ([]string, error) {
 	tagsURL := fmt.Sprintf("https://%s/v2/%s/tags/list", registry, repository)
 
+	// Initial request to discover auth requirements
 	resp, err := client.Get(tagsURL)
 	if err != nil {
 		return nil, fmt.Errorf("fetching tags from %s: %w", tagsURL, err)
 	}
 	defer resp.Body.Close()
 
+	var token string
+
 	// Handle 401 with Bearer token challenge
 	if resp.StatusCode == http.StatusUnauthorized {
-		token, err := requestToken(client, resp, registry, repository)
+		token, err = requestToken(client, resp, registry, repository)
 		if err != nil {
 			return nil, fmt.Errorf("authenticating to %s: %w", registry, err)
 		}
@@ -117,21 +121,68 @@ func fetchTags(client *http.Client, registry, repository string) ([]string, erro
 		defer resp.Body.Close()
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetching tags from %s: HTTP %d", tagsURL, resp.StatusCode)
+	// Read first page and follow pagination
+	var allTags []string
+	for {
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("fetching tags from %s: HTTP %d", tagsURL, resp.StatusCode)
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("reading response: %w", err)
+		}
+
+		var tags tagList
+		if err := json.Unmarshal(body, &tags); err != nil {
+			return nil, fmt.Errorf("parsing tags: %w", err)
+		}
+		allTags = append(allTags, tags.Tags...)
+
+		// Check for next page via Link header
+		nextURL := parseNextLink(resp.Header.Get("Link"), registry)
+		if nextURL == "" {
+			break
+		}
+
+		req, err := http.NewRequest("GET", nextURL, nil)
+		if err != nil {
+			return nil, err
+		}
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+
+		resp, err = client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("fetching next page: %w", err)
+		}
+		defer resp.Body.Close()
 	}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("reading response from %s: %w", tagsURL, err)
-	}
+	return allTags, nil
+}
 
-	var tags tagList
-	if err := json.Unmarshal(body, &tags); err != nil {
-		return nil, fmt.Errorf("parsing tags from %s: %w", tagsURL, err)
-	}
+// linkNextRegex matches the "next" relation in a Link header.
+var linkNextRegex = regexp.MustCompile(`<([^>]+)>;\s*rel="next"`)
 
-	return tags.Tags, nil
+// parseNextLink extracts the next page URL from a Link header.
+// Handles both absolute URLs and relative paths.
+func parseNextLink(header, registry string) string {
+	if header == "" {
+		return ""
+	}
+	matches := linkNextRegex.FindStringSubmatch(header)
+	if len(matches) < 2 {
+		return ""
+	}
+	url := matches[1]
+	// Some registries return relative URLs
+	if strings.HasPrefix(url, "/") {
+		url = "https://" + registry + url
+	}
+	return url
 }
 
 // wwwAuthRegex parses the Www-Authenticate header for Bearer token challenges.
