@@ -64,11 +64,11 @@ func UpdateHelmVersion(dir string, version string, dryRun bool) (string, error) 
 				continue
 			}
 
-			if setScalarValue(chartSpecNode, "version", "'"+version+"'") {
+			if setScalarValue(chartSpecNode, "version", version) {
 				updated = true
 			} else {
 				// Add version field if it doesn't exist
-				addMapEntry(chartSpecNode, "version", "'"+version+"'")
+				addMapEntry(chartSpecNode, "version", version)
 				updated = true
 			}
 		}
@@ -217,7 +217,6 @@ func setScalarValue(node *yaml.Node, key string, value string) bool {
 	for i := 0; i < len(n.Content)-1; i += 2 {
 		if n.Content[i].Value == key {
 			n.Content[i+1].Value = value
-			n.Content[i+1].Style = 0
 			return true
 		}
 	}
