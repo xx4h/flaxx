@@ -52,6 +52,31 @@ func ScanImages(dir string) ([]ImageInfo, error) {
 	return images, nil
 }
 
+// FetchImageTags queries the container registry for available tags of an image,
+// returning semver tags sorted newest first.
+func FetchImageTags(info ImageInfo) ([]string, error) {
+	tags, err := fetchTagsFunc(defaultHTTPClient(), info.Registry, info.Repo)
+	if err != nil {
+		return nil, fmt.Errorf("fetching tags for %s/%s: %w", info.Registry, info.Repo, err)
+	}
+
+	var versions []*semver.Version
+	for _, tag := range tags {
+		v, err := semver.NewVersion(tag)
+		if err != nil {
+			continue
+		}
+		versions = append(versions, v)
+	}
+	sort.Sort(sort.Reverse(semver.Collection(versions)))
+
+	result := make([]string, len(versions))
+	for i, v := range versions {
+		result[i] = v.Original()
+	}
+	return result, nil
+}
+
 // CheckImage queries the container registry for available tags and compares
 // against the current tag.
 func CheckImage(info ImageInfo) (*ImageCheckResult, error) {

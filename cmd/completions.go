@@ -160,8 +160,10 @@ func completeHelmVersions(cmd *cobra.Command, args []string, toComplete string) 
 	return filtered, cobra.ShellCompDirectiveNoFileComp
 }
 
-// completeImages lists container names from workload resources as "name=" prefixes,
-// or full current image references.
+// completeImages provides smart completion for the --image flag:
+//   - Empty input: offers "name=" prefixes for container selection
+//   - After "name=" or "name=image:": queries the registry for available tags
+//   - After "image:": queries the registry for available tags
 func completeImages(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	if len(args) < 2 {
 		return nil, cobra.ShellCompDirectiveNoFileComp
@@ -192,20 +194,77 @@ func completeImages(cmd *cobra.Command, args []string, toComplete string) ([]str
 		return nil, cobra.ShellCompDirectiveError
 	}
 
+	// Check if user has selected a container via "name=" prefix
+	containerName, _ := splitImageArg(toComplete)
+
+	// If user is typing a container name or hasn't started yet, offer container names
+	if containerName == "" && !strings.Contains(toComplete, ":") && !strings.Contains(toComplete, "/") {
+		var completions []string
+		for _, img := range images {
+			prefix := img.Container + "="
+			if strings.HasPrefix(prefix, toComplete) {
+				completions = append(completions, prefix)
+			}
+		}
+		return completions, cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveNoSpace
+	}
+
+	// Find the matching container's image to determine the registry/repo
+	var targetImage *checker.ImageInfo
+	if containerName != "" {
+		for i := range images {
+			if images[i].Container == containerName {
+				targetImage = &images[i]
+				break
+			}
+		}
+	} else if len(images) > 0 {
+		// No container name specified — use the first (or only) container
+		targetImage = &images[0]
+	}
+
+	if targetImage == nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// Query registry for available tags
+	tags, err := checker.FetchImageTags(*targetImage)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+
+	imageBase := targetImage.Registry + "/" + targetImage.Repo
+	// Use short form for Docker Hub library images
+	if targetImage.Registry == "registry-1.docker.io" {
+		if strings.HasPrefix(targetImage.Repo, "library/") {
+			imageBase = strings.TrimPrefix(targetImage.Repo, "library/")
+		} else {
+			imageBase = targetImage.Repo
+		}
+	}
+
 	var completions []string
-	for _, img := range images {
-		// Offer "name=currentimage" for multi-container selection
-		entry := img.Container + "=" + img.Image
+	for _, tag := range tags {
+		var entry string
+		if containerName != "" {
+			entry = containerName + "=" + imageBase + ":" + tag
+		} else {
+			entry = imageBase + ":" + tag
+		}
 		if strings.HasPrefix(entry, toComplete) {
 			completions = append(completions, entry)
-		}
-		// Also offer just the current image ref
-		if strings.HasPrefix(img.Image, toComplete) {
-			completions = append(completions, img.Image)
 		}
 	}
 
 	return completions, cobra.ShellCompDirectiveNoFileComp
+}
+
+// splitImageArg splits "name=rest" into (name, rest) or ("", original) if no "=".
+func splitImageArg(s string) (string, string) {
+	if idx := strings.Index(s, "="); idx >= 0 {
+		return s[:idx], s[idx+1:]
+	}
+	return "", s
 }
 
 // loadCompletionConfig loads config from cwd for use in completion functions.
