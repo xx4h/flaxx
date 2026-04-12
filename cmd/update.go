@@ -33,8 +33,9 @@ Examples:
 
   # Update a specific container in a multi-container pod
   flaxx update k8s myapp --image sidecar=registry/sidecar:v2.0`,
-	Args: cobra.ExactArgs(2),
-	RunE: runUpdate,
+	Args:              cobra.ExactArgs(2),
+	RunE:              runUpdate,
+	ValidArgsFunction: completeClusterAndApp,
 }
 
 func init() {
@@ -42,6 +43,9 @@ func init() {
 	updateCmd.Flags().StringVar(&updateImage, "image", "", "update container image (format: image:tag or name=image:tag)")
 	updateCmd.Flags().StringVarP(&updateNamespace, "namespace", "n", "", "override namespace (default: app name)")
 	updateCmd.Flags().BoolVar(&updateDryRun, "dry-run", false, "print output without writing files")
+
+	_ = updateCmd.RegisterFlagCompletionFunc("helm-version", completeHelmVersions)
+	_ = updateCmd.RegisterFlagCompletionFunc("image", completeImages)
 
 	rootCmd.AddCommand(updateCmd)
 }

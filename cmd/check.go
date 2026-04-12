@@ -37,8 +37,9 @@ Examples:
 
   # Check with namespace override
   flaxx check k8s myapp -n custom-ns`,
-	Args: cobra.RangeArgs(1, 2),
-	RunE: runCheck,
+	Args:              cobra.RangeArgs(1, 2),
+	RunE:              runCheck,
+	ValidArgsFunction: completeClusterAndApp,
 }
 
 func init() {

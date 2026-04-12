@@ -30,9 +30,10 @@ var (
 var generateCmd = &cobra.Command{
 	Use:   "generate <cluster> <app>",
 	Short: "Generate scaffolding files for a new Flux app",
-	Long:  "Generate all necessary Kustomization, namespace, and source files for deploying a new app via FluxCD.",
-	Args:  cobra.ExactArgs(2),
-	RunE:  runGenerate,
+	Long:              "Generate all necessary Kustomization, namespace, and source files for deploying a new app via FluxCD.",
+	Args:              cobra.ExactArgs(2),
+	RunE:              runGenerate,
+	ValidArgsFunction: completeClusterAndApp,
 }
 
 func init() {

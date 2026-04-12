@@ -21,9 +21,10 @@ var (
 var addCmd = &cobra.Command{
 	Use:   "add <cluster> <app>",
 	Short: "Add extras to an existing app",
-	Long:  "Render extra templates into an existing app's directories and update kustomization.yaml.",
-	Args:  cobra.ExactArgs(2),
-	RunE:  runAdd,
+	Long:              "Render extra templates into an existing app's directories and update kustomization.yaml.",
+	Args:              cobra.ExactArgs(2),
+	RunE:              runAdd,
+	ValidArgsFunction: completeClusterAndApp,
 }
 
 func init() {
