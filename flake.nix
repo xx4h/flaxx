@@ -16,7 +16,7 @@
           pname = "flaxx";
           version = "0.1.0";
           src = ./.;
-          vendorHash = null;
+          vendorHash = "sha256-komX1AmHt2NoF1x6xsNa2RFkfVzOXfYEMPhT0zwMxjw=";
         };
 
         devShells.default = pkgs.mkShell {

@@ -269,6 +269,11 @@ func resolvePath(pattern string, opts Options) (string, error) {
 	return resolveTemplate(pattern, opts)
 }
 
+// ResolvePath is the exported version for use by other commands.
+func ResolvePath(pattern string, opts Options) (string, error) {
+	return resolveTemplate(pattern, opts)
+}
+
 func resolveName(pattern string, opts Options) (string, error) {
 	return resolveTemplate(pattern, opts)
 }

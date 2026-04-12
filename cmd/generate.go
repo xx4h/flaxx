@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/xx4h/flaxx/internal/config"
+	"github.com/xx4h/flaxx/internal/extras"
 	"github.com/xx4h/flaxx/internal/generator"
 )
 
@@ -38,7 +39,7 @@ func init() {
 	generateCmd.Flags().StringVarP(&deployType, "type", "t", "", "deployment type: core, core-helm, ext-git, ext-helm, ext-oci (required)")
 	generateCmd.Flags().StringSliceVarP(&extraNames, "extra", "e", nil, "enable extras by name (repeatable)")
 	generateCmd.Flags().StringSliceVar(&setVars, "set", nil, "override template variables (key=value, repeatable)")
-	generateCmd.Flags().StringVar(&namespace, "namespace", "", "override namespace (default: app name)")
+	generateCmd.Flags().StringVarP(&namespace, "namespace", "n", "", "override namespace (default: app name)")
 	generateCmd.Flags().StringVar(&gitURL, "git-url", "", "Git repository URL (required for ext-git)")
 	generateCmd.Flags().StringVar(&gitBranch, "git-branch", "main", "Git branch")
 	generateCmd.Flags().StringVar(&gitPath, "git-path", "./deploy/production", "path in external Git repo")
@@ -49,6 +50,9 @@ func init() {
 	generateCmd.Flags().BoolVar(&dryRun, "dry-run", false, "print output without writing files")
 
 	_ = generateCmd.MarkFlagRequired("type")
+
+	_ = generateCmd.RegisterFlagCompletionFunc("type", completeType)
+	_ = generateCmd.RegisterFlagCompletionFunc("extra", completeExtra)
 
 	rootCmd.AddCommand(generateCmd)
 }
@@ -156,4 +160,42 @@ func parseSets(sets []string) (map[string]string, error) {
 		result[parts[0]] = parts[1]
 	}
 	return result, nil
+}
+
+func completeType(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+	return []string{
+		"core\tKustomization pointing to local namespace resources",
+		"core-helm\tLocal namespace + HelmRepository/HelmRelease",
+		"ext-git\tDual Kustomization with external GitRepository",
+		"ext-helm\tLocal namespace + external HelmRepository",
+		"ext-oci\tLocal namespace + OCI HelmRepository",
+	}, cobra.ShellCompDirectiveNoFileComp
+}
+
+func completeExtra(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+
+	cfg, _, err := config.LoadFromDir(cwd)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+
+	discovered, err := extras.Discover(cfg.TemplatesDir)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+
+	var names []string
+	for _, e := range discovered {
+		desc := e.Meta.Description
+		if desc != "" {
+			names = append(names, e.Meta.Name+"\t"+desc)
+		} else {
+			names = append(names, e.Meta.Name)
+		}
+	}
+	return names, cobra.ShellCompDirectiveNoFileComp
 }
