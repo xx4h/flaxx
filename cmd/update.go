@@ -20,19 +20,19 @@ var (
 )
 
 var updateCmd = &cobra.Command{
-	Use:   "update <app> <cluster>",
+	Use:   "update <cluster> <app>",
 	Short: "Update fields in an existing app's files",
 	Long: `Update specific fields in an existing app's YAML files.
 
 Examples:
   # Bump Helm chart version
-  flaxx update myapp k8s --helm-version 2.0.0
+  flaxx update k8s myapp --helm-version 2.0.0
 
   # Update container image in a Deployment
-  flaxx update myapp k8s --image registry/myapp:v1.2.3
+  flaxx update k8s myapp --image registry/myapp:v1.2.3
 
   # Update a specific container in a multi-container pod
-  flaxx update myapp k8s --image sidecar=registry/sidecar:v2.0`,
+  flaxx update k8s myapp --image sidecar=registry/sidecar:v2.0`,
 	Args: cobra.ExactArgs(2),
 	RunE: runUpdate,
 }
@@ -47,8 +47,8 @@ func init() {
 }
 
 func runUpdate(cmd *cobra.Command, args []string) error {
-	app := args[0]
-	cluster := args[1]
+	cluster := args[0]
+	app := args[1]
 
 	if updateHelmVersion == "" && updateImage == "" {
 		return fmt.Errorf("at least one of --helm-version or --image is required")

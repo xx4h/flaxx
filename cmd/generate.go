@@ -28,7 +28,7 @@ var (
 )
 
 var generateCmd = &cobra.Command{
-	Use:   "generate <app> <cluster>",
+	Use:   "generate <cluster> <app>",
 	Short: "Generate scaffolding files for a new Flux app",
 	Long:  "Generate all necessary Kustomization, namespace, and source files for deploying a new app via FluxCD.",
 	Args:  cobra.ExactArgs(2),
@@ -58,8 +58,8 @@ func init() {
 }
 
 func runGenerate(cmd *cobra.Command, args []string) error {
-	app := args[0]
-	cluster := args[1]
+	cluster := args[0]
+	app := args[1]
 
 	dt := generator.DeployType(deployType)
 	if err := validateType(dt); err != nil {
