@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://goreleaser.com/static/schema.json
-# vim: set ts=2 sw=2 tw=0 fo=cnqoj
+# vim: set ts=2 sw=2 tw=0 fo=cnqoj # codespell:ignore
 
 version: 2
 
@@ -24,7 +24,7 @@ builds:
       - -X github.com/xx4h/flaxx/cmd.date={{.Date}}
 
 archives:
-  - formats: ['tar.gz']
+  - formats: ["tar.gz"]
     name_template: >-
       {{ .ProjectName }}_
       {{- title .Os|tolower }}_
@@ -34,7 +34,7 @@ archives:
       {{- if .Arm }}v{{ .Arm }}{{ end }}
     format_overrides:
       - goos: windows
-        formats: ['zip']
+        formats: ["zip"]
 
 changelog:
   disable: true

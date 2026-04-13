@@ -4,15 +4,15 @@ Scaffolding and maintenance tool for FluxCD GitOps repositories. Generates the b
 
 ## Why flaxx?
 
-Adding a new app to a Flux repo means creating the same set of files every time: a namespace, a Kustomize resource list, a Flux Kustomization, maybe a HelmRepository and HelmRelease — all wired together with the right paths and naming. It's tedious, error-prone, and the kind of thing you get wrong just often enough to waste time debugging a typo in a sourceRef.
+Adding a new app to a Flux repository means creating the same set of files every time: a namespace, a Kustomize resource list, a Flux Kustomization, maybe a HelmRepository and HelmRelease — all wired together with the right paths and naming. It's tedious, error-prone, and the kind of thing you get wrong just often enough to waste time debugging a typo in a sourceRef.
 
-flaxx handles the scaffolding so you don't have to. One command generates all the files, adds them to the parent kustomization, and follows the conventions your repo already uses. It also helps with ongoing maintenance: checking upstream Helm repos and container registries for newer versions, and updating them in place.
+flaxx handles the scaffolding so you don't have to. One command generates all the files, adds them to the parent kustomization, and follows the conventions your repository already uses. It also helps with ongoing maintenance: checking upstream Helm repos and container registries for newer versions, and updating them in place.
 
 ## Getting Started
 
 ### Starting from scratch
 
-If you're setting up a new Flux repo:
+If you're setting up a new Flux repository:
 
 ```bash
 mkdir my-flux-repo && cd my-flux-repo
@@ -31,9 +31,9 @@ flaxx generate production myapp -t core-helm --helm-url https://charts.example.c
 
 You can customize the paths and naming by creating a `.flaxx.yaml` — or just use the defaults, which follow the Flux-recommended flat layout.
 
-### Adopting an existing repo
+### Adopting an existing repository
 
-If you already have a Flux repo with apps deployed:
+If you already have a Flux repository with apps deployed:
 
 ```bash
 cd /path/to/your/flux-repo
@@ -139,7 +139,7 @@ flaxx supports two cluster directory layouts:
 
 Files go directly into the cluster directory — no per-app subdirectories:
 
-```
+```text
 clusters/<cluster>/
   <app>-kustomization.yaml    # Flux Kustomization
   <app>-helm.yml              # HelmRepository + HelmRelease
@@ -153,7 +153,7 @@ clusters/<cluster>/
 
 Enable with `cluster_subdirs: true` in `.flaxx.yaml`:
 
-```
+```text
 clusters/<cluster>/<app>/
   <app>-kustomization.yaml
   <app>-helm.yml
@@ -164,17 +164,17 @@ clusters/<cluster>/<app>/
 
 ## Deployment Types
 
-| Type | Description |
-|------|-------------|
-| `core` | Kustomization pointing to local namespace resources |
-| `core-helm` | Like `core`, plus a HelmRepository and HelmRelease |
-| `ext-git` | Dual Kustomization: local namespace setup + external GitRepository for app manifests |
-| `ext-helm` | Like `core-helm`, but the Helm chart is pulled from an external registry |
-| `ext-oci` | Like `ext-helm`, but from an OCI-compatible container registry |
+| Type        | Description                                                                          |
+| ----------- | ------------------------------------------------------------------------------------ |
+| `core`      | Kustomization pointing to local namespace resources                                  |
+| `core-helm` | Like `core`, plus a HelmRepository and HelmRelease                                   |
+| `ext-git`   | Dual Kustomization: local namespace setup + external GitRepository for app manifests |
+| `ext-helm`  | Like `core-helm`, but the Helm chart is pulled from an external registry             |
+| `ext-oci`   | Like `ext-helm`, but from an OCI-compatible container registry                       |
 
 ## Configuration
 
-Place a `.flaxx.yaml` in your flux repo root, or generate one automatically:
+Place a `.flaxx.yaml` in your flux repository root, or generate one automatically:
 
 ```bash
 # Detect structure and generate config
@@ -240,13 +240,13 @@ Shell completions for `--helm-version` and `--image` query upstream registries f
 
 ## Custom Templates (Extras)
 
-Extras let you define reusable template sets for things like Vault Secret Operator, cert-manager, or any other recurring pattern. They live in your flux repo under the configured `templates_dir`.
+Extras let you define reusable template sets for things like Vault Secret Operator, cert-manager, or any other recurring pattern. They live in your flux repository under the configured `templates_dir`.
 
 ### Creating an Extra
 
 Create a directory with a `_meta.yaml` and one or more template files:
 
-```
+```text
 .flaxx/templates/vso/
   _meta.yaml
   serviceaccount.yaml
@@ -269,6 +269,7 @@ variables:
 ```
 
 **Template files** use Go `text/template` syntax with these built-in variables:
+
 - `{{.App}}` — app name
 - `{{.Cluster}}` — cluster name
 - `{{.Namespace}}` — namespace (defaults to app name)
@@ -276,6 +277,7 @@ variables:
 Plus any variables defined in `_meta.yaml`.
 
 The `target` field controls where files are placed:
+
 - `namespaces` — files go into the namespaces directory (default)
 - `cluster` — files go into the cluster directory
 
@@ -293,13 +295,14 @@ flaxx generate production myapp -t core -e vso -e cert-manager
 ```
 
 Built-in extras (initialize with `flaxx template init <name>`):
+
 - `vso` — Vault Secret Operator auth setup
 - `ingress` — Traefik ingress with cert-manager
 - `multus` — Multus macvlan NetworkAttachmentDefinition
 
 ## CLI Reference
 
-```
+```text
 Commands:
   generate <cluster> <app>    Generate scaffolding files for a new Flux app
   add <cluster> <app>         Add extras to an existing app

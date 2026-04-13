@@ -32,7 +32,7 @@ task --list
 
 This project uses [Conventional Commits](https://www.conventionalcommits.org/). Every commit message must follow this format:
 
-```
+```text
 <type>[optional scope]: <description>
 
 [optional body]
@@ -42,16 +42,16 @@ This project uses [Conventional Commits](https://www.conventionalcommits.org/). 
 
 ### Types
 
-| Type | Description |
-|------|-------------|
-| `feat` | A new feature |
-| `fix` | A bug fix |
-| `docs` | Documentation only changes |
+| Type       | Description                                             |
+| ---------- | ------------------------------------------------------- |
+| `feat`     | A new feature                                           |
+| `fix`      | A bugfix                                                |
+| `docs`     | Documentation only changes                              |
 | `refactor` | Code change that neither fixes a bug nor adds a feature |
-| `test` | Adding or updating tests |
-| `build` | Changes to the build system or dependencies |
-| `ci` | Changes to CI configuration |
-| `chore` | Other changes that don't modify src or test files |
+| `test`     | Adding or updating tests                                |
+| `build`    | Changes to the build tool or dependencies               |
+| `ci`       | Changes to CI configuration                             |
+| `chore`    | Other changes that don't modify src or test files       |
 
 ### Scopes
 
@@ -67,7 +67,7 @@ Scopes are optional but encouraged. Common scopes for this project:
 
 ### Examples
 
-```
+```text
 feat(checker): add OCI registry support for version checking
 
 fix(updater): preserve YAML quoting style when updating helm version
@@ -85,7 +85,7 @@ build: update vendorHash in flake.nix for new dependency
 - Do not capitalize the first letter of the description
 - No period at the end of the description
 - Keep the first line under 72 characters
-- Use the body to explain *what* and *why*, not *how*
+- Use the body to explain _what_ and _why_, not _how_
 
 ## Code Style
 
@@ -112,7 +112,7 @@ task test-unit
 
 ## Project Structure
 
-```
+```text
 cmd/               CLI command definitions and completions
 internal/
   builtin/         Built-in extra templates
