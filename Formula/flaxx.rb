@@ -1,7 +1,7 @@
 class Flaxx < Formula
   desc "Generic scaffolding and maintenance tool for FluxCD GitOps repositories"
   homepage "https://github.com/xx4h/flaxx"
-  license "MIT"
+  license "Apache-2.0"
   head "https://github.com/xx4h/flaxx.git", branch: "main"
   # Uncomment and fill in when a release is tagged:
   # url "https://github.com/xx4h/flaxx.git",

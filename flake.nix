@@ -52,7 +52,7 @@
         meta = with pkgs.lib; {
           description = "Generic scaffolding and maintenance tool for FluxCD GitOps repositories";
           homepage = "https://github.com/xx4h/flaxx";
-          license = licenses.mit;
+          license = licenses.asl20;
           maintainers = [ ];
           mainProgram = "flaxx";
         };

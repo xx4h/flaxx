@@ -1,5 +1,27 @@
 # flaxx
 
+<p align="center">
+  <img alt="GitHub stars" src="https://img.shields.io/github/stars/xx4h/flaxx">
+  <img alt="GitHub forks" src="https://img.shields.io/github/forks/xx4h/flaxx">
+</p>
+
+<!-- markdownlint-disable no-empty-links -->
+
+[![Lint Code Base](https://github.com/xx4h/flaxx/actions/workflows/linter-full.yml/badge.svg)](https://github.com/xx4h/flaxx/actions/workflows/linter-full.yml)
+[![Test Code Base](https://github.com/xx4h/flaxx/actions/workflows/test-full.yml/badge.svg)](https://github.com/xx4h/flaxx/actions/workflows/test-full.yml)
+[![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/xx4h/flaxx/total)](https://github.com/xx4h/flaxx/releases)
+[![Go Report Card](https://goreportcard.com/badge/github.com/xx4h/flaxx?)](https://goreportcard.com/report/github.com/xx4h/flaxx)
+[![Number of programming languages used](https://img.shields.io/github/languages/count/xx4h/flaxx)](#)
+[![Top programming languages used](https://img.shields.io/github/languages/top/xx4h/flaxx)](#)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+[![Latest tag](https://img.shields.io/github/v/tag/xx4h/flaxx)](https://github.com/xx4h/flaxx/tags)
+[![Closed issues](https://img.shields.io/github/issues-closed/xx4h/flaxx?color=success)](https://github.com/xx4h/flaxx/issues?q=is%3Aissue+is%3Aclosed)
+[![Closed PRs](https://img.shields.io/github/issues-pr-closed/xx4h/flaxx?color=success)](https://github.com/xx4h/flaxx/pulls?q=is%3Apr+is%3Aclosed)
+<br>
+
+<!-- markdownlint-enable no-empty-links -->
+
+
 Scaffolding and maintenance tool for FluxCD GitOps repositories. Generates the boilerplate YAML files needed to deploy a new app — namespace, Kustomization, HelmRelease, GitRepository, and more — and helps maintain them by checking for newer Helm chart and container image versions.
 
 ## Why flaxx?
@@ -340,7 +362,3 @@ task all
 # See all targets
 task --list
 ```
-
-## License
-
-MIT
