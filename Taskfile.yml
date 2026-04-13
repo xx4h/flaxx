@@ -1,10 +1,10 @@
-version: '3'
+version: "3"
 
 vars:
   BINDIR: ./bin
   BINNAME: flaxx
   INSTALL_PATH: /usr/local/bin
-  LOCAL_INSTALL_PATH: '{{.HOME}}/.local/bin'
+  LOCAL_INSTALL_PATH: "{{.HOME}}/.local/bin"
   MODULE: github.com/xx4h/flaxx
   GIT_COMMIT:
     sh: git rev-parse HEAD
@@ -36,11 +36,11 @@ tasks:
     cmds:
       - CGO_ENABLED=0 go build -trimpath -ldflags '{{.LDFLAGS}}' -o '{{.BINDIR}}/{{.BINNAME}}' ./main.go
     sources:
-      - '**/*.go'
+      - "**/*.go"
       - go.mod
       - go.sum
     generates:
-      - '{{.BINDIR}}/{{.BINNAME}}'
+      - "{{.BINDIR}}/{{.BINNAME}}"
 
   test:
     desc: Run build and style tests
@@ -59,9 +59,26 @@ tasks:
       - go test -race -v -ldflags '{{.LDFLAGS}}' ./...
 
   test-style:
+    desc: Run all style checks
+    cmds:
+      - task: test-lint
+      - task: test-editorconfig
+      - task: test-prettier
+
+  test-lint:
     desc: Run golangci-lint
     cmds:
       - golangci-lint run ./...
+
+  test-editorconfig:
+    desc: Check editorconfig compliance
+    cmds:
+      - editorconfig-checker
+
+  test-prettier:
+    desc: Check markdown formatting with prettier
+    cmds:
+      - prettier --check "**/*.md" "**/*.yaml" "**/*.yml"
 
   test-goreleaser:
     desc: Test goreleaser config with snapshot build

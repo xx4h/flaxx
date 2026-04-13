@@ -88,6 +88,8 @@
             goreleaser
             go-task
             gotools
+            editorconfig-checker
+            prettier
           ];
 
           shellHook = ''
