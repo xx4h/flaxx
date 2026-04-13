@@ -1,6 +1,6 @@
 # flaxx
 
-Generic scaffolding tool for FluxCD GitOps repositories. Generates the boilerplate YAML files needed to deploy a new app — namespace, Kustomization, HelmRelease, GitRepository, and more — from a single command.
+Scaffolding and maintenance tool for FluxCD GitOps repositories. Generates the boilerplate YAML files needed to deploy a new app — namespace, Kustomization, HelmRelease, GitRepository, and more — and helps maintain them by checking for newer Helm chart and container image versions.
 
 ## Installation
 
@@ -45,20 +45,66 @@ go install github.com/xx4h/flaxx@latest
 ```bash
 git clone https://github.com/xx4h/flaxx.git
 cd flaxx
-go build -o flaxx .
+task build
 ```
 
 ## Quick Start
 
 ```bash
+# Auto-detect your repo structure and generate config
+flaxx config init
+
 # Scaffold a Helm-based app
-flaxx generate myapp k8s -t core-helm --helm-url https://charts.example.com
+flaxx generate production myapp -t core-helm --helm-url https://charts.example.com
 
 # Scaffold an app from an external Git repo
-flaxx generate myapp k8s -t ext-git --git-url https://github.com/org/myapp.git
+flaxx generate production myapp -t ext-git --git-url https://github.com/org/myapp.git
 
 # Preview without writing files
-flaxx generate myapp k8s -t core --dry-run
+flaxx generate production myapp -t core --dry-run
+
+# Check for newer chart and image versions
+flaxx check production myapp
+
+# Check all apps in a cluster
+flaxx check production --all
+
+# Update a Helm chart version
+flaxx update production myapp --helm-version 2.0.0
+
+# Inspect the repository structure
+flaxx inspect
+```
+
+## Repository Layout
+
+flaxx supports two cluster directory layouts:
+
+### Flat layout (default, Flux-recommended)
+
+Files go directly into the cluster directory — no per-app subdirectories:
+
+```
+clusters/<cluster>/
+  <app>-kustomization.yaml    # Flux Kustomization
+  <app>-helm.yml              # HelmRepository + HelmRelease
+  kustomization.yaml           # auto-managed resource list
+<namespaces-dir>/<app>/
+  namespace.yaml
+  kustomization.yaml
+```
+
+### Subdirs layout
+
+Enable with `cluster_subdirs: true` in `.flaxx.yaml`:
+
+```
+clusters/<cluster>/<app>/
+  <app>-kustomization.yaml
+  <app>-helm.yml
+<namespaces-dir>/<app>/
+  namespace.yaml
+  kustomization.yaml
 ```
 
 ## Deployment Types
@@ -71,22 +117,19 @@ flaxx generate myapp k8s -t core --dry-run
 | `ext-helm` | Like `core-helm`, but the Helm chart is pulled from an external registry |
 | `ext-oci` | Like `ext-helm`, but from an OCI-compatible container registry |
 
-### Generated Files
-
-Each type generates files in two directories:
-
-**Cluster directory** (`clusters/<cluster>/<app>/`):
-- `<app>-kustomization.yaml` — Flux Kustomization (all types)
-- `<app>-helm.yml` — HelmRepository + HelmRelease (`core-helm`, `ext-helm`, `ext-oci`)
-- `<app>-git.yml` — GitRepository source (`ext-git`)
-
-**Namespaces directory** (`clusters/<cluster>-namespaces/<app>/`):
-- `namespace.yaml` — Kubernetes Namespace
-- `kustomization.yaml` — Kustomize resource list
-
 ## Configuration
 
-Place a `.flaxx.yaml` in your flux repo root to customize defaults, paths, and naming conventions:
+Place a `.flaxx.yaml` in your flux repo root, or generate one automatically:
+
+```bash
+# Detect structure and generate config
+flaxx config init
+
+# Preview what config would be generated
+flaxx config show
+```
+
+Example `.flaxx.yaml`:
 
 ```yaml
 defaults:
@@ -95,8 +138,9 @@ defaults:
   prune: false
 
 paths:
-  cluster_dir: "clusters/{{.Cluster}}"
-  namespaces_dir: "clusters/{{.Cluster}}-namespaces"
+  cluster_dir: "clusters/{{.Cluster}}/apps"
+  namespaces_dir: "apps"
+  cluster_subdirs: false
 
 naming:
   kustomization: "{{.App}}-kustomization.yaml"
@@ -109,6 +153,35 @@ templates_dir: ".flaxx/templates"
 ```
 
 All fields are optional — sensible defaults are used when omitted. The config file itself is optional too.
+
+## Version Checking
+
+flaxx can check for newer versions of Helm charts and container images:
+
+```bash
+# Check a single app
+flaxx check production myapp
+
+# Check all apps in a cluster
+flaxx check production --all
+```
+
+Supports standard Helm repositories, OCI registries (with token auth and pagination), and container image tags from Deployment/StatefulSet/DaemonSet resources.
+
+## Updating
+
+```bash
+# Bump Helm chart version
+flaxx update production myapp --helm-version 2.0.0
+
+# Update container image
+flaxx update production myapp --image registry/myapp:v1.2.3
+
+# Update a specific container in a multi-container pod
+flaxx update production myapp --image sidecar=registry/sidecar:v2.0
+```
+
+Shell completions for `--helm-version` and `--image` query upstream registries for available versions.
 
 ## Custom Templates (Extras)
 
@@ -151,55 +224,63 @@ The `target` field controls where files are placed:
 - `namespaces` — files go into the namespaces directory (default)
 - `cluster` — files go into the cluster directory
 
-Extra template files are automatically added to the namespace-level `kustomization.yaml` resources list.
-
 ### Using Extras
 
 ```bash
 # Enable an extra
-flaxx generate myapp k8s -t core-helm --helm-url https://charts.example.com -e vso
+flaxx generate production myapp -t core-helm --helm-url https://charts.example.com -e vso
 
 # Override extra variables
-flaxx generate myapp k8s -t core -e vso --set vault_mount=custom-mount
+flaxx generate production myapp -t core -e vso --set vault_mount=custom-mount
 
 # Multiple extras
-flaxx generate myapp k8s -t core -e vso -e cert-manager
+flaxx generate production myapp -t core -e vso -e cert-manager
 ```
+
+Built-in extras (initialize with `flaxx template init <name>`):
+- `vso` — Vault Secret Operator auth setup
+- `ingress` — Traefik ingress with cert-manager
+- `multus` — Multus macvlan NetworkAttachmentDefinition
 
 ## CLI Reference
 
 ```
-flaxx generate <app> <cluster> --type <type> [flags]
-
-Flags:
-      --dry-run               print output without writing files
-  -e, --extra strings         enable extras by name (repeatable)
-      --git-branch string     Git branch (default "main")
-      --git-path string       path in external Git repo (default "./deploy/production")
-      --git-secret string     secret name for Git auth (default "git-repo-secret")
-      --git-url string        Git repository URL (required for ext-git)
-      --helm-chart string     Helm chart name (default: app name)
-      --helm-url string       Helm repository URL (required for helm types)
-      --helm-version string   Helm chart version
-      --namespace string      override namespace (default: app name)
-      --set strings           override template variables (key=value, repeatable)
-  -t, --type string           deployment type: core, core-helm, ext-git, ext-helm, ext-oci (required)
+Commands:
+  generate <cluster> <app>    Generate scaffolding files for a new Flux app
+  add <cluster> <app>         Add extras to an existing app
+  update <cluster> <app>      Update Helm version or container image
+  check <cluster> [<app>]     Check for newer versions (use --all for all apps)
+  inspect                     Analyze the repository structure
+  config show                 Preview detected configuration
+  config init                 Generate .flaxx.yaml from detected structure
+  template list               List available built-in templates
+  template init <name>        Initialize built-in templates into your repo
+  version                     Print version information
 
 Global Flags:
-      --config string   config file (default: auto-detect .flaxx.yaml)
+  --config string   config file (default: auto-detect .flaxx.yaml)
 ```
 
 ## Development
 
 ```bash
-# Run tests
-go test ./...
+# Nix dev shell (includes Go, golangci-lint, goreleaser, task)
+nix develop
 
 # Build
-go build -o flaxx .
+task build
 
-# Nix dev shell
-nix develop
+# Run tests
+task test-unit
+
+# Run linter
+task test-style
+
+# All checks
+task all
+
+# See all targets
+task --list
 ```
 
 ## License
