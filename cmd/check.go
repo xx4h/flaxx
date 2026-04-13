@@ -15,6 +15,7 @@ import (
 var (
 	checkNamespace string
 	checkAll       bool
+	checkHelm      []string
 )
 
 var checkCmd = &cobra.Command{
@@ -35,6 +36,9 @@ Examples:
   # Check all apps in a cluster
   flaxx check k8s --all
 
+  # Check specific helm charts only
+  flaxx check k8s myapp --helm grafana --helm loki
+
   # Check with namespace override
   flaxx check k8s myapp -n custom-ns`,
 	Args:              cobra.RangeArgs(1, 2),
@@ -45,6 +49,7 @@ Examples:
 func init() {
 	checkCmd.Flags().StringVarP(&checkNamespace, "namespace", "n", "", "override namespace (default: app name)")
 	checkCmd.Flags().BoolVarP(&checkAll, "all", "a", false, "check all apps in the cluster")
+	checkCmd.Flags().StringSliceVar(&checkHelm, "helm", nil, "check specific helm chart(s) by name (repeatable)")
 
 	rootCmd.AddCommand(checkCmd)
 }
@@ -113,13 +118,22 @@ func runCheckApp(cfg config.Config, app, cluster, cwd string) error {
 
 	// Check Helm chart versions
 	appFilter := generator.AppFilter(app, cfg.Paths.ClusterSubdirs)
-	info, scanErr := checker.ScanApp(appClusterDir, appFilter)
+	helmInfos, scanErr := checker.ScanAllHelm(appClusterDir, appFilter)
 	if scanErr == nil {
-		info.App = app
-		result, checkErr := checker.CheckHelm(info)
-		if checkErr != nil {
-			fmt.Fprintf(os.Stderr, "Warning: checking helm versions: %v\n", checkErr)
-		} else {
+		helmFilter := buildHelmFilter(checkHelm)
+		for i := range helmInfos {
+			helmInfos[i].App = app
+			if helmFilter != nil && !helmFilter[helmInfos[i].ChartName] {
+				continue
+			}
+			result, checkErr := checker.CheckHelm(&helmInfos[i])
+			if checkErr != nil {
+				fmt.Fprintf(os.Stderr, "Warning: checking helm versions for %s: %v\n", helmInfos[i].ChartName, checkErr)
+				continue
+			}
+			if printed {
+				fmt.Println()
+			}
 			printCheckResult(result)
 			printed = true
 		}
@@ -196,14 +210,20 @@ func runCheckAll(cfg config.Config, cluster, cwd string) error {
 
 		// Check Helm
 		appFilter := generator.AppFilter(app, cfg.Paths.ClusterSubdirs)
-		info, scanErr := checker.ScanApp(appClusterDir, appFilter)
+		helmInfos, scanErr := checker.ScanAllHelm(appClusterDir, appFilter)
 		if scanErr == nil {
-			info.App = app
-			result, checkErr := checker.CheckHelm(info)
-			if checkErr != nil {
-				checkErrors = append(checkErrors, fmt.Sprintf("%s (helm): %v", app, checkErr))
-			} else {
-				if !first {
+			helmFilter := buildHelmFilter(checkHelm)
+			for i := range helmInfos {
+				helmInfos[i].App = app
+				if helmFilter != nil && !helmFilter[helmInfos[i].ChartName] {
+					continue
+				}
+				result, checkErr := checker.CheckHelm(&helmInfos[i])
+				if checkErr != nil {
+					checkErrors = append(checkErrors, fmt.Sprintf("%s (helm %s): %v", app, helmInfos[i].ChartName, checkErr))
+					continue
+				}
+				if !first || appPrinted {
 					fmt.Println()
 				}
 				first = false
@@ -240,6 +260,18 @@ func runCheckAll(cfg config.Config, cluster, cwd string) error {
 	}
 
 	return nil
+}
+
+// buildHelmFilter returns a set of chart names to check, or nil if no filter is set.
+func buildHelmFilter(names []string) map[string]bool {
+	if len(names) == 0 {
+		return nil
+	}
+	filter := make(map[string]bool, len(names))
+	for _, n := range names {
+		filter[n] = true
+	}
+	return filter
 }
 
 func printImageResult(r *checker.ImageCheckResult) {

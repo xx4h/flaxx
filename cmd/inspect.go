@@ -254,16 +254,20 @@ func inspectApp(cfg config.Config, app, cluster, clusterDir, namespacesDir strin
 
 	// Show helm info if available
 	appFilter := generator.AppFilter(app, cfg.Paths.ClusterSubdirs)
-	info, scanErr := checker.ScanApp(appClusterDir, appFilter)
-	if scanErr == nil {
+	helmInfos, scanErr := checker.ScanAllHelm(appClusterDir, appFilter)
+	if scanErr == nil && len(helmInfos) > 0 {
 		fmt.Println("      Helm:")
-		fmt.Printf("        Chart:   %s\n", info.ChartName)
-		if info.CurrentVersion != "" {
-			fmt.Printf("        Version: %s\n", info.CurrentVersion)
-		}
-		fmt.Printf("        Repo:    %s\n", info.RepoURL)
-		if info.RepoType != "" {
-			fmt.Printf("        Type:    %s\n", info.RepoType)
+		for _, info := range helmInfos {
+			fmt.Printf("        Chart:   %s\n", info.ChartName)
+			if info.CurrentVersion != "" {
+				fmt.Printf("        Version: %s\n", info.CurrentVersion)
+			}
+			if info.RepoURL != "" {
+				fmt.Printf("        Repo:    %s\n", info.RepoURL)
+			}
+			if info.RepoType != "" {
+				fmt.Printf("        Type:    %s\n", info.RepoType)
+			}
 		}
 	}
 

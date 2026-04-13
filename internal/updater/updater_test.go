@@ -100,6 +100,138 @@ func TestUpdateHelmVersionNoHelmRelease(t *testing.T) {
 	}
 }
 
+func TestUpdateHelmCharts_ByName(t *testing.T) {
+	dir := t.TempDir()
+
+	helmFile := `---
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: grafana
+spec:
+  chart:
+    spec:
+      chart: grafana
+      version: '7.0.0'
+---
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: loki
+spec:
+  chart:
+    spec:
+      chart: loki
+      version: '5.0.0'
+`
+	os.WriteFile(filepath.Join(dir, "monitoring-helm.yml"), []byte(helmFile), 0o644)
+
+	files, err := UpdateHelmCharts(dir, map[string]string{"grafana": "8.0.0"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("expected 1 file, got %d", len(files))
+	}
+
+	content, err := os.ReadFile(filepath.Join(dir, "monitoring-helm.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(string(content), "'8.0.0'") {
+		t.Error("grafana version not updated")
+	}
+	if !strings.Contains(string(content), "'5.0.0'") {
+		t.Error("loki version should not have changed")
+	}
+}
+
+func TestUpdateHelmCharts_Multiple(t *testing.T) {
+	dir := t.TempDir()
+
+	helmFile := `---
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: grafana
+spec:
+  chart:
+    spec:
+      chart: grafana
+      version: '7.0.0'
+---
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: loki
+spec:
+  chart:
+    spec:
+      chart: loki
+      version: '5.0.0'
+`
+	os.WriteFile(filepath.Join(dir, "monitoring-helm.yml"), []byte(helmFile), 0o644)
+
+	files, err := UpdateHelmCharts(dir, map[string]string{
+		"grafana": "8.0.0",
+		"loki":    "6.0.0",
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("expected 1 file, got %d", len(files))
+	}
+
+	content, err := os.ReadFile(filepath.Join(dir, "monitoring-helm.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(string(content), "'8.0.0'") {
+		t.Error("grafana version not updated")
+	}
+	if !strings.Contains(string(content), "'6.0.0'") {
+		t.Error("loki version not updated")
+	}
+}
+
+func TestUpdateHelmCharts_WildcardFailsWithMultiple(t *testing.T) {
+	dir := t.TempDir()
+
+	helmFile := `---
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: grafana
+spec:
+  chart:
+    spec:
+      chart: grafana
+      version: '7.0.0'
+---
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: loki
+spec:
+  chart:
+    spec:
+      chart: loki
+      version: '5.0.0'
+`
+	os.WriteFile(filepath.Join(dir, "monitoring-helm.yml"), []byte(helmFile), 0o644)
+
+	_, err := UpdateHelmCharts(dir, map[string]string{"": "9.0.0"}, false)
+	if err == nil {
+		t.Fatal("expected error when using wildcard with multiple HelmReleases")
+	}
+	if !strings.Contains(err.Error(), "multiple HelmReleases") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
 func TestUpdateImage(t *testing.T) {
 	dir := t.TempDir()
 

@@ -15,6 +15,7 @@ type HelmInfo struct {
 	App            string
 	ChartName      string
 	CurrentVersion string
+	RepoName       string // name of the HelmRepository resource
 	RepoURL        string
 	RepoType       string // "" for standard, "oci" for OCI
 	Namespace      string
@@ -27,10 +28,25 @@ type CheckResult struct {
 	AvailableUpdates []string
 }
 
-// ScanApp reads the cluster directory for an app and extracts Helm chart info
-// by finding the HelmRelease and HelmRepository resources.
+// helmRelease holds parsed HelmRelease data for matching to repositories.
+type helmRelease struct {
+	ChartName      string
+	CurrentVersion string
+	Namespace      string
+	SourceRefName  string
+}
+
+// helmRepository holds parsed HelmRepository data.
+type helmRepository struct {
+	Name     string
+	URL      string
+	RepoType string
+}
+
+// ScanAllHelm reads the cluster directory for an app and extracts all Helm chart
+// info by matching HelmRelease resources to their HelmRepository via sourceRef.
 // If appFilter is non-empty, only files with that prefix are scanned (for flat layouts).
-func ScanApp(clusterDir string, appFilter string) (*HelmInfo, error) {
+func ScanAllHelm(clusterDir string, appFilter string) ([]HelmInfo, error) {
 	files, err := findYAMLFiles(clusterDir)
 	if err != nil {
 		return nil, err
@@ -47,63 +63,56 @@ func ScanApp(clusterDir string, appFilter string) (*HelmInfo, error) {
 		files = filtered
 	}
 
-	var info HelmInfo
+	var releases []helmRelease
+	repos := make(map[string]helmRepository) // keyed by metadata.name
 
 	for _, filePath := range files {
-		data, err := os.ReadFile(filePath)
-		if err != nil {
-			return nil, fmt.Errorf("reading %s: %w", filePath, err)
+		data, readErr := os.ReadFile(filePath)
+		if readErr != nil {
+			return nil, fmt.Errorf("reading %s: %w", filePath, readErr)
 		}
 
-		resources, err := parseYAMLDocuments(data)
-		if err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", filePath, err)
+		resources, parseErr := parseYAMLDocuments(data)
+		if parseErr != nil {
+			return nil, fmt.Errorf("parsing %s: %w", filePath, parseErr)
 		}
 
 		for _, res := range resources {
 			switch res.Kind {
 			case "HelmRelease":
-				info.ChartName = res.Spec.Chart.Spec.Chart
-				info.CurrentVersion = strings.Trim(res.Spec.Chart.Spec.Version, "'\"")
-				info.Namespace = res.Metadata.Namespace
+				releases = append(releases, helmRelease{
+					ChartName:      res.Spec.Chart.Spec.Chart,
+					CurrentVersion: strings.Trim(res.Spec.Chart.Spec.Version, "'\""),
+					Namespace:      res.Metadata.Namespace,
+					SourceRefName:  res.Spec.Chart.Spec.SourceRef.Name,
+				})
 			case "HelmRepository":
-				info.RepoURL = res.Spec.URL
-				info.RepoType = res.Spec.Type
+				repos[res.Metadata.Name] = helmRepository{
+					Name:     res.Metadata.Name,
+					URL:      res.Spec.URL,
+					RepoType: res.Spec.Type,
+				}
 			}
 		}
 	}
 
-	if info.RepoURL == "" {
-		return nil, fmt.Errorf("no HelmRepository found in %s", clusterDir)
-	}
-	if info.ChartName == "" {
-		return nil, fmt.Errorf("no HelmRelease found in %s", clusterDir)
+	if len(releases) == 0 {
+		return nil, nil
 	}
 
-	return &info, nil
-}
-
-// ScanCluster scans all app subdirectories in a cluster directory and returns
-// HelmInfo for each app that has a HelmRelease and HelmRepository.
-// Apps without Helm resources are silently skipped.
-func ScanCluster(clusterDir string) ([]*HelmInfo, error) {
-	entries, err := os.ReadDir(clusterDir)
-	if err != nil {
-		return nil, fmt.Errorf("reading cluster directory %s: %w", clusterDir, err)
-	}
-
-	var results []*HelmInfo
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
+	var results []HelmInfo
+	for _, rel := range releases {
+		info := HelmInfo{
+			ChartName:      rel.ChartName,
+			CurrentVersion: rel.CurrentVersion,
+			Namespace:      rel.Namespace,
+			RepoName:       rel.SourceRefName,
 		}
-		appDir := filepath.Join(clusterDir, e.Name())
-		info, err := ScanApp(appDir, "")
-		if err != nil {
-			// Skip apps without Helm resources
-			continue
+		// Match to repository by sourceRef name
+		if repo, ok := repos[rel.SourceRefName]; ok {
+			info.RepoURL = repo.URL
+			info.RepoType = repo.RepoType
 		}
-		info.App = e.Name()
 		results = append(results, info)
 	}
 
@@ -121,8 +130,12 @@ type resource struct {
 		// HelmRelease fields
 		Chart struct {
 			Spec struct {
-				Chart   string `yaml:"chart"`
-				Version string `yaml:"version"`
+				Chart     string `yaml:"chart"`
+				Version   string `yaml:"version"`
+				SourceRef struct {
+					Kind string `yaml:"kind"`
+					Name string `yaml:"name"`
+				} `yaml:"sourceRef"`
 			} `yaml:"spec"`
 		} `yaml:"chart"`
 		// HelmRepository fields
