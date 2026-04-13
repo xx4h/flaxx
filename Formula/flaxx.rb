@@ -1,12 +1,16 @@
 class Flaxx < Formula
   desc "Generic scaffolding and maintenance tool for FluxCD GitOps repositories"
   homepage "https://github.com/xx4h/flaxx"
+  url "https://github.com/xx4h/flaxx.git",
+      tag:      "v0.1.0",
+      revision: "ab0631bb511f7141f121c86970765a9f109734c5"
   license "Apache-2.0"
   head "https://github.com/xx4h/flaxx.git", branch: "main"
-  # Uncomment and fill in when a release is tagged:
-  # url "https://github.com/xx4h/flaxx.git",
-  #     tag:      "v0.1.0",
-  #     revision: "COMMIT_SHA"
+
+  livecheck do
+    url :stable
+    regex(/^v?(\d+(?:\.\d+)+)$/i)
+  end
 
   depends_on "go" => :build
 
