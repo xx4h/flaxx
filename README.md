@@ -18,6 +18,22 @@ Or add as a flake input:
 }
 ```
 
+### Homebrew
+
+```bash
+brew tap xx4h/flaxx /path/to/flaxx
+brew install --head xx4h/flaxx/flaxx
+```
+
+<!--
+Once a release is tagged and the repo is on GitHub:
+
+```bash
+brew tap xx4h/flaxx https://github.com/xx4h/flaxx
+brew install xx4h/flaxx/flaxx
+```
+-->
+
 ### Go
 
 ```bash
