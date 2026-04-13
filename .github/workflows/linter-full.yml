@@ -1,0 +1,37 @@
+---
+name: Lint Code Base
+
+on:
+  workflow_dispatch:
+  push:
+    branches: main
+
+permissions: {}
+
+jobs:
+  build:
+    name: Lint Code Base
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+      # To report github actions status checks
+      statuses: write
+    steps:
+      - name: Checkout Code
+        # v5.0.1 (2025-11-13)
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Lint Code Base
+        # v8.5.0 (2026-02-07)
+        uses: super-linter/super-linter@61abc07d755095a68f4987d1c2c3d1d64408f1f9
+        env:
+          VALIDATE_ALL_CODEBASE: true
+          VALIDATE_JSCPD: false
+          VALIDATE_GO: false
+          VALIDATE_RUBY: false
+          VALIDATE_BIOME_FORMAT: false
+          FILTER_REGEX_EXCLUDE: .*\.github/linters/\.golangci\.yml
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

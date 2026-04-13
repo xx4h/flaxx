@@ -11,7 +11,12 @@ class Flaxx < Formula
   depends_on "go" => :build
 
   def install
-    ldflags = "-s -w -X main.version=#{version}"
+    ldflags = %W[
+      -s -w
+      -X github.com/xx4h/flaxx/cmd.version=v#{version}
+      -X github.com/xx4h/flaxx/cmd.commit=#{Utils.git_head}
+      -X github.com/xx4h/flaxx/cmd.date=#{time.iso8601}
+    ]
     system "go", "build", *std_go_args(ldflags:)
 
     generate_completions_from_executable(bin/"flaxx", "completion")

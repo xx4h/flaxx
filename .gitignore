@@ -1,2 +1,25 @@
-flaxx
+# Go binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Go coverage
+*.out
+
+# Go workspace
+go.work
+go.work.sum
+
+# Environment
+.env
+
+# flaxx specifics
+bin/
+dist/
 result
+.direnv

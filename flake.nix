@@ -7,28 +7,94 @@
   };
 
   outputs = { self, nixpkgs, flake-utils }:
+    let
+      # Read version from VERSION file, fall back to git short rev or "dev"
+      version = let
+        versionFile = builtins.readFile ./VERSION;
+        trimmed = builtins.replaceStrings [ "\n" "\r" " " ] [ "" "" "" ] versionFile;
+      in
+        if trimmed != "" then trimmed
+        else if (self ? shortRev) then self.shortRev
+        else "dev";
+
+      commit = if (self ? rev) then self.rev else "dirty";
+
+      # Format lastModifiedDate: YYYYMMDDHHMMSS -> YYYY-MM-DDTHH:MM:SSZ
+      date = let
+        raw = self.lastModifiedDate or "19700101000000";
+        year = builtins.substring 0 4 raw;
+        month = builtins.substring 4 2 raw;
+        day = builtins.substring 6 2 raw;
+        hour = builtins.substring 8 2 raw;
+        min = builtins.substring 10 2 raw;
+        sec = builtins.substring 12 2 raw;
+      in "${year}-${month}-${day}T${hour}:${min}:${sec}Z";
+
+      # Package builder function - used by both overlay and packages output
+      mkFlaxx = pkgs: pkgs.buildGoModule {
+        pname = "flaxx";
+        inherit version;
+
+        src = ./.;
+
+        vendorHash = "sha256-YXjpRl3KVhLgi3QW275D1a/f9khfisMwC1RmZ5P3Pmc=";
+
+        env.CGO_ENABLED = 0;
+
+        ldflags = [
+          "-s"
+          "-w"
+          "-X github.com/xx4h/flaxx/cmd.version=${version}"
+          "-X github.com/xx4h/flaxx/cmd.commit=${commit}"
+          "-X github.com/xx4h/flaxx/cmd.date=${date}"
+        ];
+
+        meta = with pkgs.lib; {
+          description = "Generic scaffolding and maintenance tool for FluxCD GitOps repositories";
+          homepage = "https://github.com/xx4h/flaxx";
+          license = licenses.mit;
+          maintainers = [ ];
+          mainProgram = "flaxx";
+        };
+      };
+    in
+    {
+      overlays.default = final: prev: {
+        flaxx = mkFlaxx final;
+      };
+    }
+    //
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
       in
       {
-        packages.default = pkgs.buildGoModule {
-          pname = "flaxx";
-          version = "0.1.0";
-          src = ./.;
-          vendorHash = "sha256-YXjpRl3KVhLgi3QW275D1a/f9khfisMwC1RmZ5P3Pmc=";
+        packages = {
+          flaxx = mkFlaxx pkgs;
+          default = self.packages.${system}.flaxx;
+        };
+
+        apps = {
+          flaxx = flake-utils.lib.mkApp {
+            drv = self.packages.${system}.flaxx;
+          };
+          default = self.apps.${system}.flaxx;
         };
 
         devShells.default = pkgs.mkShell {
-          packages = with pkgs; [
+          buildInputs = with pkgs; [
             go
-            gopls
+            golangci-lint
+            goreleaser
+            go-task
             gotools
           ];
+
+          shellHook = ''
+            echo "flaxx development shell"
+            echo "Go: $(go version)"
+          '';
         };
-      }) // {
-      overlays.default = final: prev: {
-        flaxx = self.packages.${prev.system}.default;
-      };
-    };
+      }
+    );
 }

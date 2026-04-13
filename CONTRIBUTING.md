@@ -7,11 +7,15 @@
 git clone https://github.com/xx4h/flaxx.git
 cd flaxx
 
-# Using Nix
+# Using Nix (recommended — includes Go, golangci-lint, goreleaser, task)
 nix develop
+# Or with direnv: `direnv allow` for automatic shell activation
 
-# Or with Go installed
-go build -o flaxx .
+# Build
+task build
+
+# See all available targets
+task --list
 ```
 
 ## Making Changes
@@ -19,9 +23,10 @@ go build -o flaxx .
 1. Create a feature branch from `main`
 2. Make your changes
 3. Add or update tests as needed
-4. Run the full test suite: `go test ./...`
-5. Commit using conventional commits (see below)
-6. Open a pull request against `main`
+4. Run the test suite: `task test-unit`
+5. Run the linter: `task test-style`
+6. Commit using conventional commits (see below)
+7. Open a pull request against `main`
 
 ## Commit Messages
 
@@ -94,7 +99,7 @@ build: update vendorHash in flake.nix for new dependency
 All changes should include tests. Run the full suite before submitting:
 
 ```bash
-go test ./...
+task test-unit
 ```
 
 ### Test Guidelines
@@ -123,5 +128,5 @@ internal/
 
 - Keep PRs focused on a single concern
 - Update or add tests for any changed behavior
-- Make sure `go test ./...` passes
+- Make sure `task test-unit` passes
 - Use a conventional commit style title for the PR

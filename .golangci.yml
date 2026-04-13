@@ -1,0 +1,45 @@
+version: "2"
+linters:
+  enable:
+    - goconst
+    - gocritic
+    - gocyclo
+    - gosec
+    - revive
+    - unconvert
+  settings:
+    errcheck:
+      check-blank: false
+    gocyclo:
+      min-complexity: 25
+    govet:
+      enable:
+        - shadow
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - dupl
+          - errcheck
+          - goconst
+          - gosec
+          - revive
+        path: _test\.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

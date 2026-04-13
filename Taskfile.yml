@@ -1,0 +1,109 @@
+version: '3'
+
+vars:
+  BINDIR: ./bin
+  BINNAME: flaxx
+  INSTALL_PATH: /usr/local/bin
+  LOCAL_INSTALL_PATH: '{{.HOME}}/.local/bin'
+  MODULE: github.com/xx4h/flaxx
+  GIT_COMMIT:
+    sh: git rev-parse HEAD
+  GIT_SHA:
+    sh: git rev-parse --short HEAD
+  GIT_TAG:
+    sh: git describe --tags --abbrev=0 --exact-match 2>/dev/null || echo ""
+  GIT_DIRTY:
+    sh: test -n "$(git status --porcelain)" && echo "dirty" || echo "clean"
+  GIT_BRANCH:
+    sh: git rev-parse --abbrev-ref HEAD
+  VERSION:
+    sh: cat VERSION 2>/dev/null || echo "dev"
+  DATE:
+    sh: date -Iseconds
+  LDFLAGS: >-
+    -w -s
+    -X {{.MODULE}}/cmd.version={{.GIT_BRANCH}}-{{.GIT_DIRTY}}
+    -X {{.MODULE}}/cmd.commit={{.GIT_COMMIT}}
+    -X {{.MODULE}}/cmd.date={{.DATE}}
+
+tasks:
+  default:
+    cmds:
+      - task: build
+
+  build:
+    desc: Build the flaxx binary
+    cmds:
+      - CGO_ENABLED=0 go build -trimpath -ldflags '{{.LDFLAGS}}' -o '{{.BINDIR}}/{{.BINNAME}}' ./main.go
+    sources:
+      - '**/*.go'
+      - go.mod
+      - go.sum
+    generates:
+      - '{{.BINDIR}}/{{.BINNAME}}'
+
+  test:
+    desc: Run build and style tests
+    deps: [build]
+    cmds:
+      - task: test-style
+
+  test-unit:
+    desc: Run unit tests
+    cmds:
+      - cmd: echo "==> Running unit tests <=="
+        silent: true
+      - go test -race -v ./...
+      - cmd: echo "==> Running unit tests with ldflags <=="
+        silent: true
+      - go test -race -v -ldflags '{{.LDFLAGS}}' ./...
+
+  test-style:
+    desc: Run golangci-lint
+    cmds:
+      - golangci-lint run ./...
+
+  test-goreleaser:
+    desc: Test goreleaser config with snapshot build
+    cmds:
+      - goreleaser release --snapshot --clean
+
+  format:
+    desc: Format Go code with goimports
+    cmds:
+      - go list -f '{{"{{.Dir}}"}}' ./... | xargs goimports -w -local {{.MODULE}}
+
+  clean:
+    desc: Remove build artifacts
+    cmds:
+      - rm -rf '{{.BINDIR}}' dist/
+
+  install:
+    desc: Install to /usr/local/bin
+    deps: [build]
+    cmds:
+      - install '{{.BINDIR}}/{{.BINNAME}}' '{{.INSTALL_PATH}}/{{.BINNAME}}'
+
+  local-install:
+    desc: Install to ~/.local/bin
+    deps: [build]
+    cmds:
+      - install '{{.BINDIR}}/{{.BINNAME}}' '{{.LOCAL_INSTALL_PATH}}/{{.BINNAME}}'
+
+  info:
+    desc: Print build info
+    silent: true
+    cmds:
+      - 'echo "Version:        {{.VERSION}}"'
+      - 'echo "Git Tag:        {{.GIT_TAG}}"'
+      - 'echo "Git Commit:     {{.GIT_COMMIT}}"'
+      - 'echo "Git Tree State: {{.GIT_DIRTY}}"'
+
+  all:
+    desc: Run all checks
+    cmds:
+      - task: clean
+      - task: format
+      - task: test
+      - task: test-unit
+      - task: test-goreleaser

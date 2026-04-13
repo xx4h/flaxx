@@ -1,6 +1,6 @@
 module github.com/xx4h/flaxx
 
-go 1.23.11
+go 1.26
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
