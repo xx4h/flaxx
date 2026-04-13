@@ -25,32 +25,60 @@ type Result struct {
 }
 
 // UpdateHelmVersion finds the HelmRelease in the cluster app directory and updates
-// the chart version field.
+// the chart version field. Deprecated: use UpdateHelmCharts instead.
 func UpdateHelmVersion(dir string, version string, dryRun bool) (string, error) {
-	files, err := findYAMLFiles(dir)
+	results, err := UpdateHelmCharts(dir, map[string]string{"": version}, dryRun)
 	if err != nil {
 		return "", err
 	}
+	if len(results) == 0 {
+		return "", fmt.Errorf("no HelmRelease found in %s", dir)
+	}
+	return results[0], nil
+}
+
+// UpdateHelmCharts updates the chart version for one or more HelmReleases.
+// The updates map is keyed by chart name → version. An empty key "" matches
+// any single HelmRelease (for backwards compatibility with --helm-version).
+func UpdateHelmCharts(dir string, updates map[string]string, dryRun bool) ([]string, error) {
+	files, err := findYAMLFiles(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	// If "" key is used, count total HelmReleases to enforce single-chart constraint
+	_, matchAny := updates[""]
+	if matchAny {
+		count, countErr := countHelmReleases(files)
+		if countErr != nil {
+			return nil, countErr
+		}
+		if count > 1 {
+			return nil, fmt.Errorf("multiple HelmReleases found; use --helm chart:version to specify which to update")
+		}
+	}
+
+	var updatedFiles []string
+	matched := make(map[string]bool)
 
 	for _, filePath := range files {
-		data, err := os.ReadFile(filePath)
-		if err != nil {
-			return "", fmt.Errorf("reading %s: %w", filePath, err)
+		data, readErr := os.ReadFile(filePath)
+		if readErr != nil {
+			return nil, fmt.Errorf("reading %s: %w", filePath, readErr)
 		}
 
-		docs, err := splitYAMLDocuments(data)
-		if err != nil {
-			return "", fmt.Errorf("parsing %s: %w", filePath, err)
+		docs, parseErr := splitYAMLDocuments(data)
+		if parseErr != nil {
+			return nil, fmt.Errorf("parsing %s: %w", filePath, parseErr)
 		}
 
-		updated := false
+		fileUpdated := false
 		for _, doc := range docs {
 			kind := getScalarValue(doc, "kind")
 			if kind != "HelmRelease" {
 				continue
 			}
 
-			// Navigate: spec.chart.spec.version
 			specNode := getMapValue(doc, "spec")
 			if specNode == nil {
 				continue
@@ -64,21 +92,61 @@ func UpdateHelmVersion(dir string, version string, dryRun bool) (string, error) 
 				continue
 			}
 
-			if setScalarValue(chartSpecNode, "version", version) {
-				updated = true
-			} else {
-				// Add version field if it doesn't exist
-				addMapEntry(chartSpecNode, "version", version)
-				updated = true
+			chartName := getScalarValue(chartSpecNode, "chart")
+
+			// Find matching update
+			version, ok := updates[chartName]
+			if !ok && matchAny {
+				version = updates[""]
+				ok = true
 			}
+			if !ok {
+				continue
+			}
+
+			if setScalarValue(chartSpecNode, "version", version) {
+				fileUpdated = true
+			} else {
+				addMapEntry(chartSpecNode, "version", version)
+				fileUpdated = true
+			}
+			matched[chartName] = true
 		}
 
-		if updated {
-			return writeDocuments(filePath, docs, dryRun)
+		if fileUpdated {
+			file, writeErr := writeDocuments(filePath, docs, dryRun)
+			if writeErr != nil {
+				return nil, writeErr
+			}
+			updatedFiles = append(updatedFiles, file)
 		}
 	}
 
-	return "", fmt.Errorf("no HelmRelease found in %s", dir)
+	if len(updatedFiles) == 0 {
+		return nil, fmt.Errorf("no matching HelmRelease found in %s", dir)
+	}
+
+	return updatedFiles, nil
+}
+
+func countHelmReleases(files []string) (int, error) {
+	count := 0
+	for _, filePath := range files {
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return 0, fmt.Errorf("reading %s: %w", filePath, err)
+		}
+		docs, err := splitYAMLDocuments(data)
+		if err != nil {
+			return 0, fmt.Errorf("parsing %s: %w", filePath, err)
+		}
+		for _, doc := range docs {
+			if getScalarValue(doc, "kind") == "HelmRelease" {
+				count++
+			}
+		}
+	}
+	return count, nil
 }
 
 // UpdateImage finds a Deployment in the namespaces app directory and updates

@@ -6,11 +6,19 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	pflag "github.com/spf13/pflag"
 )
 
-// resetFlags resets package-level flag variables that persist between cobra
-// command executions in tests.
+// resetFlags resets package-level flag variables and cobra's internal "changed"
+// state that persist between command executions in tests.
 func resetFlags() {
+	// Reset cobra's flag changed state on all commands
+	for _, cmd := range rootCmd.Commands() {
+		cmd.Flags().VisitAll(func(f *pflag.Flag) {
+			f.Changed = false
+		})
+	}
 	dryRun = false
 	deployType = ""
 	namespace = ""
@@ -24,6 +32,7 @@ func resetFlags() {
 	helmChart = ""
 	helmVersion = ""
 	updateHelmVersion = ""
+	updateHelm = nil
 	updateImage = ""
 	updateNamespace = ""
 	updateDryRun = false
@@ -33,6 +42,7 @@ func resetFlags() {
 	addDryRun = false
 	checkNamespace = ""
 	checkAll = false
+	checkHelm = nil
 }
 
 // executeCommand runs the root command with the given args and returns stdout output.
@@ -127,6 +137,101 @@ spec:
 	}
 	if !strings.Contains(string(content), "2.0.0") {
 		t.Error("helm version not updated — args may be swapped")
+	}
+}
+
+func TestUpdateHelmFlag(t *testing.T) {
+	dir := t.TempDir()
+
+	clusterDir := filepath.Join(dir, "clusters", "production")
+	os.MkdirAll(clusterDir, 0o755)
+
+	helmFile := `---
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: grafana
+spec:
+  chart:
+    spec:
+      chart: grafana
+      version: '7.0.0'
+---
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: loki
+spec:
+  chart:
+    spec:
+      chart: loki
+      version: '5.0.0'
+`
+	os.WriteFile(filepath.Join(clusterDir, "myapp-helm.yml"), []byte(helmFile), 0o644)
+
+	origDir, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(origDir)
+
+	// Update only grafana using --helm
+	_, err := executeCommand("update", "production", "myapp", "--helm", "grafana:8.0.0")
+	if err != nil {
+		t.Fatalf("update --helm failed: %v", err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(clusterDir, "myapp-helm.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(string(content), "'8.0.0'") {
+		t.Error("grafana version not updated")
+	}
+	if !strings.Contains(string(content), "'5.0.0'") {
+		t.Error("loki version should not have changed")
+	}
+}
+
+func TestUpdateHelmVersionFailsWithMultiple(t *testing.T) {
+	dir := t.TempDir()
+
+	clusterDir := filepath.Join(dir, "clusters", "production")
+	os.MkdirAll(clusterDir, 0o755)
+
+	helmFile := `---
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: grafana
+spec:
+  chart:
+    spec:
+      chart: grafana
+      version: '7.0.0'
+---
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: loki
+spec:
+  chart:
+    spec:
+      chart: loki
+      version: '5.0.0'
+`
+	os.WriteFile(filepath.Join(clusterDir, "myapp-helm.yml"), []byte(helmFile), 0o644)
+
+	origDir, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(origDir)
+
+	// --helm-version should fail with multiple HelmReleases
+	_, err := executeCommand("update", "production", "myapp", "--helm-version", "9.0.0")
+	if err == nil {
+		t.Fatal("expected error when using --helm-version with multiple HelmReleases")
+	}
+	if !strings.Contains(err.Error(), "multiple HelmReleases") {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
 

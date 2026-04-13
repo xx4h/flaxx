@@ -127,23 +127,25 @@ func completeHelmVersions(cmd *cobra.Command, args []string, toComplete string) 
 	}
 
 	appClusterDir := generator.ResolveAppClusterDir(filepath.Join(cwd, clusterDir), app, cfg.Paths.ClusterSubdirs)
-	info, err := checker.ScanApp(appClusterDir, generator.AppFilter(app, cfg.Paths.ClusterSubdirs))
-	if err != nil {
+	helmInfos, scanErr := checker.ScanAllHelm(appClusterDir, generator.AppFilter(app, cfg.Paths.ClusterSubdirs))
+	if scanErr != nil || len(helmInfos) == 0 {
 		return nil, cobra.ShellCompDirectiveError
 	}
 
+	// Complete versions from the first helm chart found
+	info := helmInfos[0]
 	var versions []string
 	if info.RepoType == "oci" {
-		semVersions, err := checker.FetchOCIVersions(info.RepoURL, info.ChartName)
-		if err != nil {
+		semVersions, fetchErr := checker.FetchOCIVersions(info.RepoURL, info.ChartName)
+		if fetchErr != nil {
 			return nil, cobra.ShellCompDirectiveError
 		}
 		for _, v := range semVersions {
 			versions = append(versions, v.Original())
 		}
 	} else {
-		semVersions, err := checker.FetchHelmVersions(info.RepoURL, info.ChartName)
-		if err != nil {
+		semVersions, fetchErr := checker.FetchHelmVersions(info.RepoURL, info.ChartName)
+		if fetchErr != nil {
 			return nil, cobra.ShellCompDirectiveError
 		}
 		for _, v := range semVersions {
