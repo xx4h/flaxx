@@ -25,8 +25,8 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Lint Code Base
-        # v8.5.0 (2026-02-07)
-        uses: super-linter/super-linter@61abc07d755095a68f4987d1c2c3d1d64408f1f9
+        # v8.6.0 (2026-03-31)
+        uses: super-linter/super-linter@9e863354e3ff62e0727d37183162c4a88873df41
         env:
           VALIDATE_ALL_CODEBASE: false
           VALIDATE_JSCPD: false
