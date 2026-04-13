@@ -49,7 +49,7 @@ func init() {
 	rootCmd.AddCommand(checkCmd)
 }
 
-func runCheck(cmd *cobra.Command, args []string) error {
+func runCheck(_ *cobra.Command, args []string) error {
 	var app, cluster string
 
 	cluster = args[0]
@@ -112,12 +112,12 @@ func runCheckApp(cfg config.Config, app, cluster, cwd string) error {
 	printed := false
 
 	// Check Helm chart versions
-	info, err := checker.ScanApp(appClusterDir)
-	if err == nil {
+	info, scanErr := checker.ScanApp(appClusterDir)
+	if scanErr == nil {
 		info.App = app
-		result, err := checker.CheckHelm(info)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: checking helm versions: %v\n", err)
+		result, checkErr := checker.CheckHelm(info)
+		if checkErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: checking helm versions: %v\n", checkErr)
 		} else {
 			printCheckResult(result)
 			printed = true
@@ -125,13 +125,13 @@ func runCheckApp(cfg config.Config, app, cluster, cwd string) error {
 	}
 
 	// Check container image versions
-	images, err := checker.ScanImages(appNamespacesDir)
-	if err == nil && len(images) > 0 {
+	images, imgScanErr := checker.ScanImages(appNamespacesDir)
+	if imgScanErr == nil && len(images) > 0 {
 		var imgErrors []string
 		for _, img := range images {
-			result, err := checker.CheckImage(img)
-			if err != nil {
-				imgErrors = append(imgErrors, fmt.Sprintf("%s: %v", img.Image, err))
+			result, imgCheckErr := checker.CheckImage(img)
+			if imgCheckErr != nil {
+				imgErrors = append(imgErrors, fmt.Sprintf("%s: %v", img.Image, imgCheckErr))
 				continue
 			}
 			if printed {
@@ -201,12 +201,12 @@ func runCheckAll(cfg config.Config, cluster, cwd string) error {
 		appPrinted := false
 
 		// Check Helm
-		info, err := checker.ScanApp(appClusterDir)
-		if err == nil {
+		info, scanErr := checker.ScanApp(appClusterDir)
+		if scanErr == nil {
 			info.App = app
-			result, err := checker.CheckHelm(info)
-			if err != nil {
-				checkErrors = append(checkErrors, fmt.Sprintf("%s (helm): %v", app, err))
+			result, checkErr := checker.CheckHelm(info)
+			if checkErr != nil {
+				checkErrors = append(checkErrors, fmt.Sprintf("%s (helm): %v", app, checkErr))
 			} else {
 				if !first {
 					fmt.Println()
@@ -218,12 +218,12 @@ func runCheckAll(cfg config.Config, cluster, cwd string) error {
 		}
 
 		// Check images
-		images, err := checker.ScanImages(appNsDir)
-		if err == nil {
+		images, imgScanErr := checker.ScanImages(appNsDir)
+		if imgScanErr == nil {
 			for _, img := range images {
-				result, err := checker.CheckImage(img)
-				if err != nil {
-					checkErrors = append(checkErrors, fmt.Sprintf("%s (image %s): %v", app, img.Image, err))
+				result, imgCheckErr := checker.CheckImage(img)
+				if imgCheckErr != nil {
+					checkErrors = append(checkErrors, fmt.Sprintf("%s (image %s): %v", app, img.Image, imgCheckErr))
 					continue
 				}
 				if !first || appPrinted {

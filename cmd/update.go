@@ -50,7 +50,7 @@ func init() {
 	rootCmd.AddCommand(updateCmd)
 }
 
-func runUpdate(cmd *cobra.Command, args []string) error {
+func runUpdate(_ *cobra.Command, args []string) error {
 	cluster := args[0]
 	app := args[1]
 

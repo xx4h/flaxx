@@ -46,8 +46,8 @@ func TestRunCoreType(t *testing.T) {
 
 	// Check kustomization.yaml was created
 	ksFile := filepath.Join(dir, "clusters", "k8s-namespaces", "myapp", "kustomization.yaml")
-	if _, err := os.Stat(ksFile); err != nil {
-		t.Fatalf("kustomization.yaml not created: %v", err)
+	if _, statErr := os.Stat(ksFile); statErr != nil {
+		t.Fatalf("kustomization.yaml not created: %v", statErr)
 	}
 
 	// Check flux kustomization was created

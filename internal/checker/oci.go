@@ -135,8 +135,8 @@ func fetchTags(client *http.Client, registry, repository string) ([]string, erro
 		}
 
 		var tags tagList
-		if err := json.Unmarshal(body, &tags); err != nil {
-			return nil, fmt.Errorf("parsing tags: %w", err)
+		if unmarshalErr := json.Unmarshal(body, &tags); unmarshalErr != nil {
+			return nil, fmt.Errorf("parsing tags: %w", unmarshalErr)
 		}
 		allTags = append(allTags, tags.Tags...)
 

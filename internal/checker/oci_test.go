@@ -11,11 +11,11 @@ import (
 
 func TestParseOCIURL(t *testing.T) {
 	tests := []struct {
-		url       string
-		chart     string
-		wantReg   string
-		wantRepo  string
-		wantErr   bool
+		url      string
+		chart    string
+		wantReg  string
+		wantRepo string
+		wantErr  bool
 	}{
 		{"oci://registry.example.com/charts", "myapp", "registry.example.com", "charts/myapp", false},
 		{"oci://ghcr.io/org", "mychart", "ghcr.io", "org/mychart", false},
@@ -138,11 +138,11 @@ func TestFetchOCIVersions_Pagination(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.URL.Path == "/v2/org/myapp/tags/list" && r.URL.Query().Get("last") == "":
-			w.Header().Set("Link", fmt.Sprintf(`</v2/org/myapp/tags/list?last=1.1.0>; rel="next"`))
+			w.Header().Set("Link", `</v2/org/myapp/tags/list?last=1.1.0>; rel="next"`)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(page1)
 		case r.URL.Path == "/v2/org/myapp/tags/list" && r.URL.Query().Get("last") == "1.1.0":
-			w.Header().Set("Link", fmt.Sprintf(`</v2/org/myapp/tags/list?last=2.1.0>; rel="next"`))
+			w.Header().Set("Link", `</v2/org/myapp/tags/list?last=2.1.0>; rel="next"`)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(page2)
 		case r.URL.Path == "/v2/org/myapp/tags/list" && r.URL.Query().Get("last") == "2.1.0":

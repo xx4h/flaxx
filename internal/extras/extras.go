@@ -60,8 +60,8 @@ func Discover(templatesDir string) ([]Extra, error) {
 		}
 
 		var meta Meta
-		if err := yaml.Unmarshal(data, &meta); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", metaPath, err)
+		if unmarshalErr := yaml.Unmarshal(data, &meta); unmarshalErr != nil {
+			return nil, fmt.Errorf("parsing %s: %w", metaPath, unmarshalErr)
 		}
 
 		files, err := listTemplateFiles(extraDir)

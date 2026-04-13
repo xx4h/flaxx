@@ -25,11 +25,11 @@ var templateListCmd = &cobra.Command{
 }
 
 var templateInitCmd = &cobra.Command{
-	Use:   "init <name> [name...]",
-	Short: "Initialize built-in templates into your flux repo",
-	Long:  "Write built-in template files to the configured templates directory.",
-	Args:  cobra.MinimumNArgs(1),
-	RunE:  runTemplateInit,
+	Use:               "init <name> [name...]",
+	Short:             "Initialize built-in templates into your flux repo",
+	Long:              "Write built-in template files to the configured templates directory.",
+	Args:              cobra.MinimumNArgs(1),
+	RunE:              runTemplateInit,
 	ValidArgsFunction: completeTemplateName,
 }
 
@@ -39,14 +39,14 @@ func init() {
 	rootCmd.AddCommand(templateCmd)
 }
 
-func runTemplateList(cmd *cobra.Command, args []string) {
+func runTemplateList(_ *cobra.Command, _ []string) {
 	templates := builtin.All()
 	for _, t := range templates {
 		fmt.Printf("  %-12s %s\n", t.Name, t.Description)
 	}
 }
 
-func runTemplateInit(cmd *cobra.Command, args []string) error {
+func runTemplateInit(_ *cobra.Command, args []string) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("getting working directory: %w", err)
@@ -84,7 +84,7 @@ func runTemplateInit(cmd *cobra.Command, args []string) error {
 
 		for fileName, content := range tmpl.Files {
 			filePath := filepath.Join(targetDir, fileName)
-			if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
+			if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil { //nolint:gosec // template files need to be readable
 				return fmt.Errorf("writing %s: %w", filePath, err)
 			}
 		}

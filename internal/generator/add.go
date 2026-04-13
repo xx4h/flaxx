@@ -40,10 +40,10 @@ func RunAdd(cfg config.Config, opts AddOptions, repoRoot string) (*Result, error
 
 	// Verify the app already exists
 	if !opts.DryRun {
-		if _, err := os.Stat(appClusterDir); os.IsNotExist(err) {
+		if _, statErr := os.Stat(appClusterDir); os.IsNotExist(statErr) {
 			return nil, fmt.Errorf("app directory does not exist: %s", appClusterDir)
 		}
-		if _, err := os.Stat(appNamespacesDir); os.IsNotExist(err) {
+		if _, statErr := os.Stat(appNamespacesDir); os.IsNotExist(statErr) {
 			return nil, fmt.Errorf("app directory does not exist: %s", appNamespacesDir)
 		}
 	}
@@ -88,7 +88,7 @@ func RunAdd(cfg config.Config, opts AddOptions, repoRoot string) (*Result, error
 			}
 
 			target := appNamespacesDir
-			if extra.Meta.Target == "cluster" {
+			if extra.Meta.Target == TargetCluster {
 				target = appClusterDir
 			}
 
@@ -96,7 +96,7 @@ func RunAdd(cfg config.Config, opts AddOptions, repoRoot string) (*Result, error
 			if err := writeFile(outPath, content, opts.DryRun, &result); err != nil {
 				return nil, err
 			}
-			if extra.Meta.Target != "cluster" {
+			if extra.Meta.Target != TargetCluster {
 				newNsFiles = append(newNsFiles, fileName)
 			}
 		}
@@ -156,7 +156,7 @@ func addToKustomization(ksPath string, newFiles []string, dryRun bool, result *R
 		return nil
 	}
 
-	if err := os.WriteFile(ksPath, []byte(updated), 0o644); err != nil {
+	if err := os.WriteFile(ksPath, []byte(updated), 0o644); err != nil { //nolint:gosec // kustomization files need to be readable
 		return fmt.Errorf("writing %s: %w", ksPath, err)
 	}
 	result.Files = append(result.Files, rel+" (updated)")

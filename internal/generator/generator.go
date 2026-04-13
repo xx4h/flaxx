@@ -21,6 +21,9 @@ const (
 	TypeExtGit   DeployType = "ext-git"
 	TypeExtHelm  DeployType = "ext-helm"
 	TypeExtOCI   DeployType = "ext-oci"
+
+	// TargetCluster is the target value for extras that go into the cluster directory.
+	TargetCluster = "cluster"
 )
 
 type Options struct {
@@ -72,11 +75,11 @@ func Run(cfg config.Config, opts Options, repoRoot string) (*Result, error) {
 	appNamespacesDir := filepath.Join(repoRoot, namespacesDir, opts.App)
 
 	if !opts.DryRun {
-		if err := checkNotExists(appClusterDir); err != nil {
-			return nil, err
+		if existsErr := checkNotExists(appClusterDir); existsErr != nil {
+			return nil, existsErr
 		}
-		if err := checkNotExists(appNamespacesDir); err != nil {
-			return nil, err
+		if existsErr := checkNotExists(appNamespacesDir); existsErr != nil {
+			return nil, existsErr
 		}
 	}
 
@@ -132,106 +135,127 @@ func Run(cfg config.Config, opts Options, repoRoot string) (*Result, error) {
 
 	var result Result
 
-	// Discover and process extras
-	var extraFiles []string
-	if len(opts.Extras) > 0 {
-		templatesDir := filepath.Join(repoRoot, cfg.TemplatesDir)
-		discovered, err := extras.Discover(templatesDir)
-		if err != nil {
-			return nil, fmt.Errorf("discovering extras: %w", err)
-		}
-
-		for _, extraName := range opts.Extras {
-			extra := extras.FindByName(discovered, extraName)
-			if extra == nil {
-				return nil, fmt.Errorf("extra %q not found in %s", extraName, templatesDir)
-			}
-
-			extraData := extras.ExtraData{
-				App:       opts.App,
-				Cluster:   opts.Cluster,
-				Namespace: opts.Namespace,
-				Vars:      opts.Sets,
-			}
-
-			vars, err := extras.ResolveVariables(extra.Meta, extraData)
-			if err != nil {
-				return nil, fmt.Errorf("resolving variables for extra %q: %w", extraName, err)
-			}
-			extraData.Vars = vars
-
-			for _, fileName := range extra.Files {
-				filePath := filepath.Join(extra.Dir, fileName)
-				content, err := extras.RenderFile(filePath, extraData)
-				if err != nil {
-					return nil, fmt.Errorf("rendering extra %q file %s: %w", extraName, fileName, err)
-				}
-
-				target := appNamespacesDir
-				if extra.Meta.Target == "cluster" {
-					target = appClusterDir
-				}
-
-				outPath := filepath.Join(target, fileName)
-				if err := writeFile(outPath, content, opts.DryRun, &result); err != nil {
-					return nil, err
-				}
-				if extra.Meta.Target != "cluster" {
-					extraFiles = append(extraFiles, fileName)
-				}
-			}
-		}
+	// Process extras
+	extraFiles, extraErr := processExtras(cfg, opts, repoRoot, appClusterDir, appNamespacesDir, &result)
+	if extraErr != nil {
+		return nil, extraErr
 	}
 
-	// Generate namespace.yaml
-	nsContent, err := templates.RenderNamespace(tmplData)
-	if err != nil {
-		return nil, err
-	}
-	if err := writeFile(filepath.Join(appNamespacesDir, cfg.Naming.Namespace), nsContent, opts.DryRun, &result); err != nil {
-		return nil, err
-	}
-
-	// Generate kustomization.yaml (namespace-level)
-	nsKsContent, err := templates.RenderNsKustomization(extraFiles)
-	if err != nil {
-		return nil, err
-	}
-	if err := writeFile(filepath.Join(appNamespacesDir, cfg.Naming.NsKustomization), nsKsContent, opts.DryRun, &result); err != nil {
-		return nil, err
+	// Generate namespace files
+	if renderErr := renderNamespaceFiles(cfg, tmplData, extraFiles, appNamespacesDir, opts.DryRun, &result); renderErr != nil {
+		return nil, renderErr
 	}
 
 	// Generate flux kustomization
-	isDual := opts.Type == TypeExtGit
-	ksContent, err := templates.RenderFluxKustomization(ksData, isDual)
-	if err != nil {
-		return nil, err
-	}
-	if err := writeFile(filepath.Join(appClusterDir, kustomizationName), ksContent, opts.DryRun, &result); err != nil {
-		return nil, err
+	if renderErr := renderFluxKustomization(ksData, opts.Type, kustomizationName, appClusterDir, opts.DryRun, &result); renderErr != nil {
+		return nil, renderErr
 	}
 
 	// Generate type-specific files
-	switch opts.Type {
-	case TypeCoreHelm, TypeExtHelm, TypeExtOCI:
-		helmContent, err := templates.RenderHelmFile(tmplData)
-		if err != nil {
-			return nil, err
-		}
-		if err := writeFile(filepath.Join(appClusterDir, helmName), helmContent, opts.DryRun, &result); err != nil {
-			return nil, err
-		}
-	case TypeExtGit:
-		gitContent, err := templates.RenderGitRepository(tmplData)
-		if err != nil {
-			return nil, err
-		}
-		if err := writeFile(filepath.Join(appClusterDir, gitName), gitContent, opts.DryRun, &result); err != nil {
-			return nil, err
-		}
+	if renderErr := renderTypeFiles(opts.Type, tmplData, helmName, gitName, appClusterDir, opts.DryRun, &result); renderErr != nil {
+		return nil, renderErr
 	}
 
 	return &result, nil
+}
+
+func processExtras(cfg config.Config, opts Options, repoRoot, appClusterDir, appNamespacesDir string, result *Result) ([]string, error) {
+	if len(opts.Extras) == 0 {
+		return nil, nil
+	}
+
+	templatesDir := filepath.Join(repoRoot, cfg.TemplatesDir)
+	discovered, err := extras.Discover(templatesDir)
+	if err != nil {
+		return nil, fmt.Errorf("discovering extras: %w", err)
+	}
+
+	var extraFiles []string
+	for _, extraName := range opts.Extras {
+		extra := extras.FindByName(discovered, extraName)
+		if extra == nil {
+			return nil, fmt.Errorf("extra %q not found in %s", extraName, templatesDir)
+		}
+
+		extraData := extras.ExtraData{
+			App:       opts.App,
+			Cluster:   opts.Cluster,
+			Namespace: opts.Namespace,
+			Vars:      opts.Sets,
+		}
+
+		vars, err := extras.ResolveVariables(extra.Meta, extraData)
+		if err != nil {
+			return nil, fmt.Errorf("resolving variables for extra %q: %w", extraName, err)
+		}
+		extraData.Vars = vars
+
+		for _, fileName := range extra.Files {
+			filePath := filepath.Join(extra.Dir, fileName)
+			content, err := extras.RenderFile(filePath, extraData)
+			if err != nil {
+				return nil, fmt.Errorf("rendering extra %q file %s: %w", extraName, fileName, err)
+			}
+
+			target := appNamespacesDir
+			if extra.Meta.Target == TargetCluster {
+				target = appClusterDir
+			}
+
+			outPath := filepath.Join(target, fileName)
+			if err := writeFile(outPath, content, opts.DryRun, result); err != nil {
+				return nil, err
+			}
+			if extra.Meta.Target != TargetCluster {
+				extraFiles = append(extraFiles, fileName)
+			}
+		}
+	}
+
+	return extraFiles, nil
+}
+
+func renderNamespaceFiles(cfg config.Config, tmplData templates.TemplateData, extraFiles []string, appNamespacesDir string, dryRun bool, result *Result) error {
+	nsContent, err := templates.RenderNamespace(tmplData)
+	if err != nil {
+		return err
+	}
+	if writeErr := writeFile(filepath.Join(appNamespacesDir, cfg.Naming.Namespace), nsContent, dryRun, result); writeErr != nil {
+		return writeErr
+	}
+
+	nsKsContent, ksErr := templates.RenderNsKustomization(extraFiles)
+	if ksErr != nil {
+		return ksErr
+	}
+	return writeFile(filepath.Join(appNamespacesDir, cfg.Naming.NsKustomization), nsKsContent, dryRun, result)
+}
+
+func renderFluxKustomization(ksData templates.KustomizationData, deployType DeployType, kustomizationName, appClusterDir string, dryRun bool, result *Result) error {
+	isDual := deployType == TypeExtGit
+	ksContent, err := templates.RenderFluxKustomization(ksData, isDual)
+	if err != nil {
+		return err
+	}
+	return writeFile(filepath.Join(appClusterDir, kustomizationName), ksContent, dryRun, result)
+}
+
+func renderTypeFiles(deployType DeployType, tmplData templates.TemplateData, helmName, gitName, appClusterDir string, dryRun bool, result *Result) error {
+	switch deployType {
+	case TypeCoreHelm, TypeExtHelm, TypeExtOCI:
+		helmContent, err := templates.RenderHelmFile(tmplData)
+		if err != nil {
+			return err
+		}
+		return writeFile(filepath.Join(appClusterDir, helmName), helmContent, dryRun, result)
+	case TypeExtGit:
+		gitContent, err := templates.RenderGitRepository(tmplData)
+		if err != nil {
+			return err
+		}
+		return writeFile(filepath.Join(appClusterDir, gitName), gitContent, dryRun, result)
+	}
+	return nil
 }
 
 func writeFile(path, content string, dryRun bool, result *Result) error {
@@ -251,7 +275,7 @@ func writeFile(path, content string, dryRun bool, result *Result) error {
 		return fmt.Errorf("creating directory %s: %w", dir, err)
 	}
 
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil { //nolint:gosec // config files need to be readable
 		return fmt.Errorf("writing %s: %w", path, err)
 	}
 

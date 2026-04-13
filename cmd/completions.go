@@ -14,7 +14,7 @@ import (
 
 // completeClusterAndApp provides positional arg completions:
 // arg 0 = cluster, arg 1 = app.
-func completeClusterAndApp(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+func completeClusterAndApp(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	switch len(args) {
 	case 0:
 		return completeClusters(toComplete)
@@ -114,7 +114,7 @@ func completeHelmVersions(cmd *cobra.Command, args []string, toComplete string) 
 		return nil, cobra.ShellCompDirectiveError
 	}
 
-	ns, _ := cmd.Flags().GetString("namespace")
+	ns, _ := cmd.Flags().GetString("namespace") //nolint:errcheck // flag is always registered
 	if ns == "" {
 		ns = app
 	}
@@ -177,7 +177,7 @@ func completeImages(cmd *cobra.Command, args []string, toComplete string) ([]str
 		return nil, cobra.ShellCompDirectiveError
 	}
 
-	ns, _ := cmd.Flags().GetString("namespace")
+	ns, _ := cmd.Flags().GetString("namespace") //nolint:errcheck // flag is always registered
 	if ns == "" {
 		ns = app
 	}

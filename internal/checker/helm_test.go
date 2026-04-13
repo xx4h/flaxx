@@ -112,4 +112,3 @@ entries:
 		t.Errorf("expected no updates, got %v", result.AvailableUpdates)
 	}
 }
-

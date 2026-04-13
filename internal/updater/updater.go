@@ -274,7 +274,7 @@ func writeDocuments(filePath string, docs []*yaml.Node, dryRun bool) (string, er
 		return rel, nil
 	}
 
-	if err := os.WriteFile(filePath, []byte(buf.String()), 0o644); err != nil {
+	if err := os.WriteFile(filePath, []byte(buf.String()), 0o644); err != nil { //nolint:gosec // YAML config files need to be readable
 		return "", fmt.Errorf("writing %s: %w", filePath, err)
 	}
 

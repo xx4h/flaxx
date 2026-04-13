@@ -19,8 +19,8 @@ var (
 )
 
 var addCmd = &cobra.Command{
-	Use:   "add <cluster> <app>",
-	Short: "Add extras to an existing app",
+	Use:               "add <cluster> <app>",
+	Short:             "Add extras to an existing app",
 	Long:              "Render extra templates into an existing app's directories and update kustomization.yaml.",
 	Args:              cobra.ExactArgs(2),
 	RunE:              runAdd,
@@ -40,7 +40,7 @@ func init() {
 	rootCmd.AddCommand(addCmd)
 }
 
-func runAdd(cmd *cobra.Command, args []string) error {
+func runAdd(_ *cobra.Command, args []string) error {
 	cluster := args[0]
 	app := args[1]
 
