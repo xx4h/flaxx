@@ -14,8 +14,9 @@ type Defaults struct {
 }
 
 type Paths struct {
-	ClusterDir    string `yaml:"cluster_dir"`
-	NamespacesDir string `yaml:"namespaces_dir"`
+	ClusterDir     string `yaml:"cluster_dir"`
+	NamespacesDir  string `yaml:"namespaces_dir"`
+	ClusterSubdirs bool   `yaml:"cluster_subdirs"`
 }
 
 type Naming struct {

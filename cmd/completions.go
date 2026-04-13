@@ -68,7 +68,8 @@ func completeClusters(toComplete string) ([]string, cobra.ShellCompDirective) {
 	return clusters, cobra.ShellCompDirectiveNoFileComp
 }
 
-// completeApps lists app names within a cluster's directory.
+// completeApps lists app names by scanning the namespaces directory
+// (always has per-app subdirectories regardless of cluster dir layout).
 func completeApps(cluster, toComplete string) ([]string, cobra.ShellCompDirective) {
 	cwd, cfg, err := loadCompletionConfig()
 	if err != nil {
@@ -76,13 +77,13 @@ func completeApps(cluster, toComplete string) ([]string, cobra.ShellCompDirectiv
 	}
 
 	genOpts := generator.Options{App: "_", Cluster: cluster, Namespace: "_"}
-	clusterDir, err := generator.ResolvePath(cfg.Paths.ClusterDir, genOpts)
+	namespacesDir, err := generator.ResolvePath(cfg.Paths.NamespacesDir, genOpts)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveError
 	}
 
-	fullClusterDir := filepath.Join(cwd, clusterDir)
-	entries, err := os.ReadDir(fullClusterDir)
+	fullNamespacesDir := filepath.Join(cwd, namespacesDir)
+	entries, err := os.ReadDir(fullNamespacesDir)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveError
 	}
@@ -125,7 +126,7 @@ func completeHelmVersions(cmd *cobra.Command, args []string, toComplete string) 
 		return nil, cobra.ShellCompDirectiveError
 	}
 
-	appClusterDir := filepath.Join(cwd, clusterDir, app)
+	appClusterDir := generator.ResolveAppClusterDir(filepath.Join(cwd, clusterDir), app, cfg.Paths.ClusterSubdirs)
 	info, err := checker.ScanApp(appClusterDir)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveError

@@ -71,15 +71,20 @@ func Run(cfg config.Config, opts Options, repoRoot string) (*Result, error) {
 		return nil, fmt.Errorf("resolving namespaces dir: %w", err)
 	}
 
-	appClusterDir := filepath.Join(repoRoot, clusterDir, opts.App)
+	fullClusterDir := filepath.Join(repoRoot, clusterDir)
+	appClusterDir := ResolveAppClusterDir(fullClusterDir, opts.App, cfg.Paths.ClusterSubdirs)
 	appNamespacesDir := filepath.Join(repoRoot, namespacesDir, opts.App)
 
 	if !opts.DryRun {
-		if existsErr := checkNotExists(appClusterDir); existsErr != nil {
-			return nil, existsErr
-		}
 		if existsErr := checkNotExists(appNamespacesDir); existsErr != nil {
 			return nil, existsErr
+		}
+		// With subdirs, check that the app directory doesn't exist
+		// With flat layout, check that the kustomization file doesn't exist
+		if cfg.Paths.ClusterSubdirs {
+			if existsErr := checkNotExists(appClusterDir); existsErr != nil {
+				return nil, existsErr
+			}
 		}
 	}
 
@@ -156,7 +161,97 @@ func Run(cfg config.Config, opts Options, repoRoot string) (*Result, error) {
 		return nil, renderErr
 	}
 
+	// Auto-update parent kustomization.yaml in the cluster directory
+	if !opts.DryRun {
+		var clusterFiles []string
+		clusterFiles = append(clusterFiles, clusterResourcePath(kustomizationName, opts.App, cfg.Paths.ClusterSubdirs))
+		switch opts.Type {
+		case TypeCoreHelm, TypeExtHelm, TypeExtOCI:
+			clusterFiles = append(clusterFiles, clusterResourcePath(helmName, opts.App, cfg.Paths.ClusterSubdirs))
+		case TypeExtGit:
+			clusterFiles = append(clusterFiles, clusterResourcePath(gitName, opts.App, cfg.Paths.ClusterSubdirs))
+		}
+		if updateErr := updateClusterKustomization(fullClusterDir, clusterFiles); updateErr != nil {
+			return nil, fmt.Errorf("updating cluster kustomization: %w", updateErr)
+		}
+	}
+
 	return &result, nil
+}
+
+// clusterResourcePath returns the path to reference in the cluster kustomization.yaml.
+// With subdirs: "myapp/myapp-kustomization.yaml". Flat: "myapp-kustomization.yaml".
+func clusterResourcePath(fileName, app string, subdirs bool) string {
+	if subdirs {
+		return filepath.Join(app, fileName)
+	}
+	return fileName
+}
+
+// updateClusterKustomization adds resources to the cluster directory's kustomization.yaml,
+// creating it if it doesn't exist.
+func updateClusterKustomization(clusterDir string, resources []string) error {
+	ksPath := filepath.Join(clusterDir, "kustomization.yaml")
+
+	existing := make(map[string]bool)
+	var lines []string
+
+	data, err := os.ReadFile(ksPath)
+	if err == nil {
+		// Parse existing resources
+		inResources := false
+		for _, line := range strings.Split(string(data), "\n") {
+			lines = append(lines, line)
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "resources:" {
+				inResources = true
+				continue
+			}
+			if inResources {
+				if strings.HasPrefix(trimmed, "- ") {
+					existing[strings.TrimPrefix(trimmed, "- ")] = true
+				} else if trimmed != "" {
+					inResources = false
+				}
+			}
+		}
+	}
+
+	// Find new resources to add
+	var toAdd []string
+	for _, r := range resources {
+		if !existing[r] {
+			toAdd = append(toAdd, r)
+		}
+	}
+
+	if len(toAdd) == 0 {
+		return nil
+	}
+
+	if len(lines) == 0 {
+		// Create new kustomization.yaml
+		lines = append(lines, "apiVersion: kustomize.config.k8s.io/v1beta1")
+		lines = append(lines, "kind: Kustomization")
+		lines = append(lines, "")
+		lines = append(lines, "resources:")
+	}
+
+	for _, r := range toAdd {
+		lines = append(lines, "- "+r)
+	}
+
+	// Ensure trailing newline
+	content := strings.Join(lines, "\n")
+	if !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+
+	if mkdirErr := os.MkdirAll(clusterDir, 0o755); mkdirErr != nil {
+		return fmt.Errorf("creating directory %s: %w", clusterDir, mkdirErr)
+	}
+
+	return os.WriteFile(ksPath, []byte(content), 0o644) //nolint:gosec // kustomization files need to be readable
 }
 
 func processExtras(cfg config.Config, opts Options, repoRoot, appClusterDir, appNamespacesDir string, result *Result) ([]string, error) {
@@ -296,6 +391,16 @@ func resolvePath(pattern string, opts Options) (string, error) {
 // ResolvePath is the exported version for use by other commands.
 func ResolvePath(pattern string, opts Options) (string, error) {
 	return resolveTemplate(pattern, opts)
+}
+
+// ResolveAppClusterDir returns the directory where cluster-level files for an app
+// are stored. With subdirs=true, files go into a per-app subdirectory. With
+// subdirs=false (flat layout), files go directly into the cluster directory.
+func ResolveAppClusterDir(base, app string, subdirs bool) string {
+	if subdirs {
+		return filepath.Join(base, app)
+	}
+	return base
 }
 
 func resolveName(pattern string, opts Options) (string, error) {

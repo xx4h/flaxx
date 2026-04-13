@@ -106,7 +106,7 @@ func runCheckApp(cfg config.Config, app, cluster, cwd string) error {
 		return err
 	}
 
-	appClusterDir := filepath.Join(cwd, clusterDir, app)
+	appClusterDir := generator.ResolveAppClusterDir(filepath.Join(cwd, clusterDir), app, cfg.Paths.ClusterSubdirs)
 	appNamespacesDir := filepath.Join(cwd, namespacesDir, app)
 
 	printed := false
@@ -170,16 +170,9 @@ func runCheckAll(cfg config.Config, cluster, cwd string) error {
 	fullClusterDir := filepath.Join(cwd, clusterDir)
 	fullNamespacesDir := filepath.Join(cwd, namespacesDir)
 
-	// Collect all app names from both directories
+	// Discover apps from namespaces dir (always has per-app subdirectories)
 	appNames := make(map[string]bool)
-	if entries, err := os.ReadDir(fullClusterDir); err == nil {
-		for _, e := range entries {
-			if e.IsDir() {
-				appNames[e.Name()] = true
-			}
-		}
-	}
-	if entries, err := os.ReadDir(fullNamespacesDir); err == nil {
+	if entries, readErr := os.ReadDir(fullNamespacesDir); readErr == nil {
 		for _, e := range entries {
 			if e.IsDir() {
 				appNames[e.Name()] = true
@@ -196,7 +189,7 @@ func runCheckAll(cfg config.Config, cluster, cwd string) error {
 	first := true
 
 	for app := range appNames {
-		appClusterDir := filepath.Join(fullClusterDir, app)
+		appClusterDir := generator.ResolveAppClusterDir(fullClusterDir, app, cfg.Paths.ClusterSubdirs)
 		appNsDir := filepath.Join(fullNamespacesDir, app)
 		appPrinted := false
 

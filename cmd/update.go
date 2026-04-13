@@ -91,7 +91,7 @@ func runUpdate(_ *cobra.Command, args []string) error {
 		return err
 	}
 
-	appClusterDir := filepath.Join(cwd, clusterDir, app)
+	appClusterDir := generator.ResolveAppClusterDir(filepath.Join(cwd, clusterDir), app, cfg.Paths.ClusterSubdirs)
 	appNamespacesDir := filepath.Join(cwd, namespacesDir, app)
 
 	var updatedFiles []string

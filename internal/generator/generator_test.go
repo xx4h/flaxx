@@ -19,6 +19,7 @@ func TestRunCoreType(t *testing.T) {
 	os.MkdirAll(nsDir, 0o755)
 
 	cfg := config.DefaultConfig()
+	cfg.Paths.ClusterSubdirs = true
 	opts := Options{
 		App:     "myapp",
 		Cluster: "k8s",
@@ -68,6 +69,7 @@ func TestRunCoreHelmType(t *testing.T) {
 	os.MkdirAll(filepath.Join(dir, "clusters", "k8s-namespaces"), 0o755)
 
 	cfg := config.DefaultConfig()
+	cfg.Paths.ClusterSubdirs = true
 	opts := Options{
 		App:     "myapp",
 		Cluster: "k8s",
@@ -104,6 +106,7 @@ func TestRunExtGitType(t *testing.T) {
 	os.MkdirAll(filepath.Join(dir, "clusters", "k8s-namespaces"), 0o755)
 
 	cfg := config.DefaultConfig()
+	cfg.Paths.ClusterSubdirs = true
 	opts := Options{
 		App:       "ddns",
 		Cluster:   "k8s",
@@ -151,6 +154,7 @@ func TestRunDryRun(t *testing.T) {
 	dir := t.TempDir()
 
 	cfg := config.DefaultConfig()
+	cfg.Paths.ClusterSubdirs = true
 	opts := Options{
 		App:     "myapp",
 		Cluster: "k8s",
@@ -177,11 +181,12 @@ func TestRunDryRun(t *testing.T) {
 func TestRunFailsIfDirExists(t *testing.T) {
 	dir := t.TempDir()
 
-	// Create the app dir to trigger conflict
+	// Create the app dir to trigger conflict (subdirs mode)
 	os.MkdirAll(filepath.Join(dir, "clusters", "k8s", "myapp"), 0o755)
 	os.MkdirAll(filepath.Join(dir, "clusters", "k8s-namespaces"), 0o755)
 
 	cfg := config.DefaultConfig()
+	cfg.Paths.ClusterSubdirs = true
 	opts := Options{
 		App:     "myapp",
 		Cluster: "k8s",
@@ -194,6 +199,103 @@ func TestRunFailsIfDirExists(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "already exists") {
 		t.Errorf("expected 'already exists' error, got: %v", err)
+	}
+}
+
+func TestRunCoreTypeFlat(t *testing.T) {
+	dir := t.TempDir()
+
+	os.MkdirAll(filepath.Join(dir, "clusters", "k8s"), 0o755)
+	os.MkdirAll(filepath.Join(dir, "clusters", "k8s-namespaces"), 0o755)
+
+	cfg := config.DefaultConfig()
+	// ClusterSubdirs defaults to false (flat layout)
+	opts := Options{
+		App:     "myapp",
+		Cluster: "k8s",
+		Type:    TypeCore,
+	}
+
+	result, err := Run(cfg, opts, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(result.Files) != 3 {
+		t.Errorf("expected 3 files, got %d: %v", len(result.Files), result.Files)
+	}
+
+	// Flux kustomization should be flat in cluster dir (not in myapp/ subdirectory)
+	fluxKs := filepath.Join(dir, "clusters", "k8s", "myapp-kustomization.yaml")
+	content, err := os.ReadFile(fluxKs)
+	if err != nil {
+		t.Fatalf("flux kustomization not created at flat path: %v", err)
+	}
+	if !strings.Contains(string(content), "name: flux-system") {
+		t.Error("flux kustomization missing flux-system ref")
+	}
+
+	// Should NOT exist in a subdirectory
+	wrongPath := filepath.Join(dir, "clusters", "k8s", "myapp", "myapp-kustomization.yaml")
+	if _, statErr := os.Stat(wrongPath); statErr == nil {
+		t.Error("flat layout should not create per-app subdirectory")
+	}
+
+	// Parent kustomization.yaml should be auto-updated
+	parentKs := filepath.Join(dir, "clusters", "k8s", "kustomization.yaml")
+	parentContent, err := os.ReadFile(parentKs)
+	if err != nil {
+		t.Fatalf("parent kustomization.yaml not created: %v", err)
+	}
+	if !strings.Contains(string(parentContent), "- myapp-kustomization.yaml") {
+		t.Errorf("parent kustomization.yaml missing app entry, got:\n%s", string(parentContent))
+	}
+}
+
+func TestRunCoreHelmTypeFlat(t *testing.T) {
+	dir := t.TempDir()
+
+	os.MkdirAll(filepath.Join(dir, "clusters", "k8s"), 0o755)
+	os.MkdirAll(filepath.Join(dir, "clusters", "k8s-namespaces"), 0o755)
+
+	cfg := config.DefaultConfig()
+	opts := Options{
+		App:     "myapp",
+		Cluster: "k8s",
+		Type:    TypeCoreHelm,
+		HelmURL: "https://charts.example.com",
+	}
+
+	result, err := Run(cfg, opts, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(result.Files) != 4 {
+		t.Errorf("expected 4 files, got %d: %v", len(result.Files), result.Files)
+	}
+
+	// Helm file should be flat in cluster dir
+	helmFile := filepath.Join(dir, "clusters", "k8s", "myapp-helm.yml")
+	content, err := os.ReadFile(helmFile)
+	if err != nil {
+		t.Fatalf("helm file not created at flat path: %v", err)
+	}
+	if !strings.Contains(string(content), "kind: HelmRelease") {
+		t.Error("helm file missing HelmRelease")
+	}
+
+	// Parent kustomization should list both files
+	parentKs := filepath.Join(dir, "clusters", "k8s", "kustomization.yaml")
+	parentContent, err := os.ReadFile(parentKs)
+	if err != nil {
+		t.Fatalf("parent kustomization.yaml not created: %v", err)
+	}
+	if !strings.Contains(string(parentContent), "- myapp-kustomization.yaml") {
+		t.Error("parent kustomization.yaml missing kustomization entry")
+	}
+	if !strings.Contains(string(parentContent), "- myapp-helm.yml") {
+		t.Error("parent kustomization.yaml missing helm entry")
 	}
 }
 

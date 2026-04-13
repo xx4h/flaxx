@@ -35,14 +35,11 @@ func RunAdd(cfg config.Config, opts AddOptions, repoRoot string) (*Result, error
 		return nil, fmt.Errorf("resolving namespaces dir: %w", err)
 	}
 
-	appClusterDir := filepath.Join(repoRoot, clusterDir, opts.App)
+	appClusterDir := ResolveAppClusterDir(filepath.Join(repoRoot, clusterDir), opts.App, cfg.Paths.ClusterSubdirs)
 	appNamespacesDir := filepath.Join(repoRoot, namespacesDir, opts.App)
 
-	// Verify the app already exists
+	// Verify the app already exists (check namespaces dir — always has per-app subdirs)
 	if !opts.DryRun {
-		if _, statErr := os.Stat(appClusterDir); os.IsNotExist(statErr) {
-			return nil, fmt.Errorf("app directory does not exist: %s", appClusterDir)
-		}
 		if _, statErr := os.Stat(appNamespacesDir); os.IsNotExist(statErr) {
 			return nil, fmt.Errorf("app directory does not exist: %s", appNamespacesDir)
 		}

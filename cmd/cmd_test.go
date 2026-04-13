@@ -61,11 +61,11 @@ func TestGenerateArgOrderVerifyPaths(t *testing.T) {
 		t.Fatalf("generate failed: %v", err)
 	}
 
-	// Verify files went to the right cluster directory
-	ksFile := filepath.Join(dir, "clusters", "staging", "webapp", "webapp-kustomization.yaml")
+	// Verify files went to the right cluster directory (flat layout — no app subdirectory)
+	ksFile := filepath.Join(dir, "clusters", "staging", "webapp-kustomization.yaml")
 	content, err := os.ReadFile(ksFile)
 	if err != nil {
-		t.Fatalf("kustomization not created at expected path: %v", err)
+		t.Fatalf("kustomization not created at expected flat path: %v", err)
 	}
 	if !strings.Contains(string(content), "name: webapp") {
 		t.Error("kustomization missing app name 'webapp'")
@@ -81,8 +81,8 @@ func TestGenerateArgOrderVerifyPaths(t *testing.T) {
 	}
 
 	// Verify wrong paths don't exist (would exist if args were swapped)
-	wrongDir := filepath.Join(dir, "clusters", "webapp")
-	if _, err := os.Stat(wrongDir); err == nil {
+	wrongPath := filepath.Join(dir, "clusters", "webapp", "staging-kustomization.yaml")
+	if _, err := os.Stat(wrongPath); err == nil {
 		t.Error("files created under clusters/webapp/ — args are swapped (app used as cluster)")
 	}
 }
@@ -90,9 +90,9 @@ func TestGenerateArgOrderVerifyPaths(t *testing.T) {
 func TestUpdateArgOrder(t *testing.T) {
 	dir := t.TempDir()
 
-	// Create app files with cluster=production, app=myapp
-	appDir := filepath.Join(dir, "clusters", "production", "myapp")
-	os.MkdirAll(appDir, 0o755)
+	// Create app files with cluster=production, app=myapp (flat layout)
+	clusterDir := filepath.Join(dir, "clusters", "production")
+	os.MkdirAll(clusterDir, 0o755)
 
 	helmFile := `---
 apiVersion: helm.toolkit.fluxcd.io/v2beta1
@@ -108,7 +108,7 @@ spec:
         kind: HelmRepository
         name: myapp
 `
-	os.WriteFile(filepath.Join(appDir, "myapp-helm.yml"), []byte(helmFile), 0o644)
+	os.WriteFile(filepath.Join(clusterDir, "myapp-helm.yml"), []byte(helmFile), 0o644)
 
 	origDir, _ := os.Getwd()
 	os.Chdir(dir)
@@ -120,8 +120,8 @@ spec:
 		t.Fatalf("update failed: %v", err)
 	}
 
-	// Verify the file was updated in the correct location
-	content, err := os.ReadFile(filepath.Join(appDir, "myapp-helm.yml"))
+	// Verify the file was updated in the correct location (flat)
+	content, err := os.ReadFile(filepath.Join(clusterDir, "myapp-helm.yml"))
 	if err != nil {
 		t.Fatal(err)
 	}
