@@ -2,6 +2,61 @@
 
 Scaffolding and maintenance tool for FluxCD GitOps repositories. Generates the boilerplate YAML files needed to deploy a new app — namespace, Kustomization, HelmRelease, GitRepository, and more — and helps maintain them by checking for newer Helm chart and container image versions.
 
+## Why flaxx?
+
+Adding a new app to a Flux repo means creating the same set of files every time: a namespace, a Kustomize resource list, a Flux Kustomization, maybe a HelmRepository and HelmRelease — all wired together with the right paths and naming. It's tedious, error-prone, and the kind of thing you get wrong just often enough to waste time debugging a typo in a sourceRef.
+
+flaxx handles the scaffolding so you don't have to. One command generates all the files, adds them to the parent kustomization, and follows the conventions your repo already uses. It also helps with ongoing maintenance: checking upstream Helm repos and container registries for newer versions, and updating them in place.
+
+## Getting Started
+
+### Starting from scratch
+
+If you're setting up a new Flux repo:
+
+```bash
+mkdir my-flux-repo && cd my-flux-repo
+git init
+
+# Create your first app
+flaxx generate production myapp -t core-helm --helm-url https://charts.example.com
+
+# flaxx creates the directory structure and all required files:
+#   clusters/production/myapp-kustomization.yaml
+#   clusters/production/myapp-helm.yml
+#   clusters/production/kustomization.yaml  (auto-managed)
+#   clusters/production-namespaces/myapp/namespace.yaml
+#   clusters/production-namespaces/myapp/kustomization.yaml
+```
+
+You can customize the paths and naming by creating a `.flaxx.yaml` — or just use the defaults, which follow the Flux-recommended flat layout.
+
+### Adopting an existing repo
+
+If you already have a Flux repo with apps deployed:
+
+```bash
+cd /path/to/your/flux-repo
+
+# Let flaxx detect your directory structure
+flaxx config init
+
+# This scans for cluster directories, namespace directories,
+# and whether you use flat files or per-app subdirectories,
+# then generates a .flaxx.yaml that matches your layout.
+
+# Verify what flaxx sees
+flaxx inspect
+
+# Now you can add new apps and they'll follow your existing conventions
+flaxx generate production newapp -t core-helm --helm-url https://charts.example.com
+
+# Check all existing apps for available updates
+flaxx check production --all
+```
+
+flaxx detects common Flux layouts automatically, including `clusters/<cluster>/apps/` + `apps/` (Flux standard) and `clusters/<cluster>/` + `clusters/<cluster>-namespaces/` patterns.
+
 ## Installation
 
 ### Nix Flake
