@@ -112,7 +112,8 @@ func runCheckApp(cfg config.Config, app, cluster, cwd string) error {
 	printed := false
 
 	// Check Helm chart versions
-	info, scanErr := checker.ScanApp(appClusterDir)
+	appFilter := generator.AppFilter(app, cfg.Paths.ClusterSubdirs)
+	info, scanErr := checker.ScanApp(appClusterDir, appFilter)
 	if scanErr == nil {
 		info.App = app
 		result, checkErr := checker.CheckHelm(info)
@@ -194,7 +195,8 @@ func runCheckAll(cfg config.Config, cluster, cwd string) error {
 		appPrinted := false
 
 		// Check Helm
-		info, scanErr := checker.ScanApp(appClusterDir)
+		appFilter := generator.AppFilter(app, cfg.Paths.ClusterSubdirs)
+		info, scanErr := checker.ScanApp(appClusterDir, appFilter)
 		if scanErr == nil {
 			info.App = app
 			result, checkErr := checker.CheckHelm(info)

@@ -41,7 +41,7 @@ spec:
 		t.Fatal(err)
 	}
 
-	info, err := ScanApp(dir)
+	info, err := ScanApp(dir, "")
 	if err != nil {
 		t.Fatalf("ScanApp failed: %v", err)
 	}
@@ -92,7 +92,7 @@ spec:
 		t.Fatal(err)
 	}
 
-	info, err := ScanApp(dir)
+	info, err := ScanApp(dir, "")
 	if err != nil {
 		t.Fatalf("ScanApp failed: %v", err)
 	}
@@ -118,7 +118,7 @@ spec:
 		t.Fatal(err)
 	}
 
-	_, err := ScanApp(dir)
+	_, err := ScanApp(dir, "")
 	if err == nil {
 		t.Fatal("expected error for missing HelmRepository, got nil")
 	}
@@ -218,7 +218,7 @@ spec:
 		t.Fatal(err)
 	}
 
-	info, err := ScanApp(dir)
+	info, err := ScanApp(dir, "")
 	if err != nil {
 		t.Fatalf("ScanApp failed: %v", err)
 	}

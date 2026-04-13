@@ -127,7 +127,7 @@ func completeHelmVersions(cmd *cobra.Command, args []string, toComplete string) 
 	}
 
 	appClusterDir := generator.ResolveAppClusterDir(filepath.Join(cwd, clusterDir), app, cfg.Paths.ClusterSubdirs)
-	info, err := checker.ScanApp(appClusterDir)
+	info, err := checker.ScanApp(appClusterDir, generator.AppFilter(app, cfg.Paths.ClusterSubdirs))
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveError
 	}

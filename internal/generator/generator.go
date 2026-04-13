@@ -393,6 +393,16 @@ func ResolvePath(pattern string, opts Options) (string, error) {
 	return resolveTemplate(pattern, opts)
 }
 
+// AppFilter returns the app name to use as a file prefix filter when scanning
+// in flat layout, or empty string for subdirs layout (where the directory itself
+// scopes the files).
+func AppFilter(app string, subdirs bool) string {
+	if subdirs {
+		return ""
+	}
+	return app
+}
+
 // ResolveAppClusterDir returns the directory where cluster-level files for an app
 // are stored. With subdirs=true, files go into a per-app subdirectory. With
 // subdirs=false (flat layout), files go directly into the cluster directory.

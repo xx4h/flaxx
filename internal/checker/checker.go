@@ -29,10 +29,22 @@ type CheckResult struct {
 
 // ScanApp reads the cluster directory for an app and extracts Helm chart info
 // by finding the HelmRelease and HelmRepository resources.
-func ScanApp(clusterDir string) (*HelmInfo, error) {
+// If appFilter is non-empty, only files with that prefix are scanned (for flat layouts).
+func ScanApp(clusterDir string, appFilter string) (*HelmInfo, error) {
 	files, err := findYAMLFiles(clusterDir)
 	if err != nil {
 		return nil, err
+	}
+
+	if appFilter != "" {
+		var filtered []string
+		for _, f := range files {
+			base := filepath.Base(f)
+			if strings.HasPrefix(base, appFilter+"-") || strings.HasPrefix(base, appFilter+".") {
+				filtered = append(filtered, f)
+			}
+		}
+		files = filtered
 	}
 
 	var info HelmInfo
@@ -86,7 +98,7 @@ func ScanCluster(clusterDir string) ([]*HelmInfo, error) {
 			continue
 		}
 		appDir := filepath.Join(clusterDir, e.Name())
-		info, err := ScanApp(appDir)
+		info, err := ScanApp(appDir, "")
 		if err != nil {
 			// Skip apps without Helm resources
 			continue
