@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/xx4h/flaxx/internal/checker"
 	"github.com/xx4h/flaxx/internal/config"
 	"github.com/xx4h/flaxx/internal/generator"
+	"github.com/xx4h/flaxx/internal/output"
 )
 
 var (
@@ -253,9 +255,9 @@ func runCheckAll(cfg config.Config, cluster, cwd string) error {
 
 	if len(checkErrors) > 0 {
 		fmt.Println()
-		fmt.Println("Errors:")
+		fmt.Println(output.Error.Render("Errors:"))
 		for _, e := range checkErrors {
-			fmt.Printf("  %s\n", e)
+			fmt.Println(output.Error.Render("  " + e))
 		}
 	}
 
@@ -275,62 +277,76 @@ func buildHelmFilter(names []string) map[string]bool {
 }
 
 func printImageResult(r *checker.ImageCheckResult) {
-	fmt.Printf("Image:      %s\n", r.Image)
-	fmt.Printf("Container:  %s\n", r.Container)
-	fmt.Printf("Registry:   %s\n", r.Registry)
+	const kw = 12
+	current := r.Tag
+	if current == "" {
+		current = "(no tag)"
+	}
 
-	if r.Tag != "" {
-		fmt.Printf("Current:    %s\n", r.Tag)
-	} else {
-		fmt.Printf("Current:    (no tag)\n")
+	lines := []string{
+		output.KeyValue("Image:", r.Image, kw),
+		output.KeyValue("Container:", r.Container, kw),
+		output.KeyValue("Current:", current, kw),
 	}
 
 	if r.LatestVersion != "" {
-		fmt.Printf("Latest:     %s\n", r.LatestVersion)
+		latestVal := r.LatestVersion
+		if r.Tag != "" && r.LatestVersion != r.Tag {
+			latestVal = output.Warning.Render(r.LatestVersion)
+		}
+		lines = append(lines, output.KeyValue("Latest:", latestVal, kw))
 	}
 
-	if len(r.AvailableUpdates) == 0 {
-		fmt.Println("\nUp to date.")
-	} else {
-		fmt.Printf("\nAvailable updates (%d):\n", len(r.AvailableUpdates))
-		limit := 10
-		if len(r.AvailableUpdates) < limit {
-			limit = len(r.AvailableUpdates)
-		}
-		for _, v := range r.AvailableUpdates[:limit] {
-			fmt.Printf("  %s\n", v)
-		}
-		if len(r.AvailableUpdates) > limit {
-			fmt.Printf("  ... and %d more\n", len(r.AvailableUpdates)-limit)
-		}
-	}
+	fmt.Println(output.Subtitle.Render("Image: " + r.Image))
+	fmt.Println(output.SectionBox.Render(strings.Join(lines, "\n")))
+
+	printUpdates(r.AvailableUpdates)
 }
 
 func printCheckResult(r *checker.CheckResult) {
-	fmt.Printf("Chart:      %s\n", r.ChartName)
-	fmt.Printf("Repository: %s\n", r.RepoURL)
-
-	if r.CurrentVersion != "" {
-		fmt.Printf("Current:    %s\n", r.CurrentVersion)
-	} else {
-		fmt.Printf("Current:    (not pinned)\n")
+	const kw = 12
+	current := r.CurrentVersion
+	if current == "" {
+		current = "(not pinned)"
 	}
 
-	fmt.Printf("Latest:     %s\n", r.LatestVersion)
-
-	if len(r.AvailableUpdates) == 0 {
-		fmt.Println("\nUp to date.")
-	} else {
-		fmt.Printf("\nAvailable updates (%d):\n", len(r.AvailableUpdates))
-		limit := 10
-		if len(r.AvailableUpdates) < limit {
-			limit = len(r.AvailableUpdates)
-		}
-		for _, v := range r.AvailableUpdates[:limit] {
-			fmt.Printf("  %s\n", v)
-		}
-		if len(r.AvailableUpdates) > limit {
-			fmt.Printf("  ... and %d more\n", len(r.AvailableUpdates)-limit)
-		}
+	latestVal := r.LatestVersion
+	if r.CurrentVersion != "" && r.LatestVersion != r.CurrentVersion {
+		latestVal = output.Warning.Render(r.LatestVersion)
 	}
+
+	lines := []string{
+		output.KeyValue("Chart:", r.ChartName, kw),
+		output.KeyValue("Repository:", r.RepoURL, kw),
+		output.KeyValue("Current:", current, kw),
+		output.KeyValue("Latest:", latestVal, kw),
+	}
+
+	fmt.Println(output.Subtitle.Render("Helm: " + r.ChartName))
+	fmt.Println(output.SectionBox.Render(strings.Join(lines, "\n")))
+
+	printUpdates(r.AvailableUpdates)
+}
+
+func printUpdates(updates []string) {
+	if len(updates) == 0 {
+		fmt.Println(output.Success.Render("  Up to date."))
+		return
+	}
+
+	limit := 10
+	if len(updates) < limit {
+		limit = len(updates)
+	}
+
+	var lines []string
+	for _, v := range updates[:limit] {
+		lines = append(lines, "  "+v)
+	}
+	if len(updates) > limit {
+		lines = append(lines, output.Dim.Render(fmt.Sprintf("  ... and %d more", len(updates)-limit)))
+	}
+
+	fmt.Println(output.Warning.Render(fmt.Sprintf("  %d update(s) available:", len(updates))))
+	fmt.Println(strings.Join(lines, "\n"))
 }

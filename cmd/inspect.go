@@ -6,11 +6,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
 	"github.com/xx4h/flaxx/internal/checker"
 	"github.com/xx4h/flaxx/internal/config"
 	"github.com/xx4h/flaxx/internal/generator"
+	"github.com/xx4h/flaxx/internal/output"
 )
 
 var inspectCmd = &cobra.Command{
@@ -49,41 +51,46 @@ func runInspect(_ *cobra.Command, _ []string) error {
 	}
 
 	// Config section
-	fmt.Println("Configuration:")
+	cfgDisplay := "(none, using defaults)"
 	if cfgPath != "" {
 		rel, relErr := filepath.Rel(cwd, cfgPath)
 		if relErr != nil {
 			rel = cfgPath
 		}
-		fmt.Printf("  Config file:     %s\n", rel)
-	} else {
-		fmt.Println("  Config file:     (none, using defaults)")
+		cfgDisplay = rel
 	}
-	fmt.Printf("  Cluster dir:     %s\n", cfg.Paths.ClusterDir)
-	fmt.Printf("  Namespaces dir:  %s\n", cfg.Paths.NamespacesDir)
+
+	layoutDisplay := "flat"
 	if cfg.Paths.ClusterSubdirs {
-		fmt.Println("  Layout:          subdirs (per-app subdirectories in cluster dir)")
-	} else {
-		fmt.Println("  Layout:          flat (files directly in cluster dir)")
+		layoutDisplay = "subdirs"
 	}
-	fmt.Printf("  Templates dir:   %s\n", cfg.TemplatesDir)
+
+	const kw = 16
+	configLines := []string{
+		output.KeyValue("Config file:", cfgDisplay, kw),
+		output.KeyValue("Cluster dir:", cfg.Paths.ClusterDir, kw),
+		output.KeyValue("Namespaces dir:", cfg.Paths.NamespacesDir, kw),
+		output.KeyValue("Layout:", layoutDisplay, kw),
+		output.KeyValue("Templates dir:", cfg.TemplatesDir, kw),
+	}
+
+	fmt.Println(output.Title.Render("Configuration"))
+	fmt.Println(output.SectionBox.Render(strings.Join(configLines, "\n")))
 	fmt.Println()
 
 	// Discover clusters
 	clusters, discoverErr := discoverClusters(cfg, cwd)
 	if discoverErr != nil {
-		fmt.Printf("Clusters: (unable to scan: %v)\n", discoverErr)
+		fmt.Println(output.Warning.Render(fmt.Sprintf("Unable to scan clusters: %v", discoverErr)))
 		return nil
 	}
 
 	if len(clusters) == 0 {
-		fmt.Println("Clusters: (none found)")
+		fmt.Println(output.Dim.Render("No clusters found."))
 		return nil
 	}
 
-	fmt.Printf("Clusters: %d found\n", len(clusters))
 	for _, cluster := range clusters {
-		fmt.Printf("\n  [%s]\n", cluster)
 		inspectCluster(cfg, cluster, cwd)
 	}
 
@@ -123,47 +130,60 @@ func discoverClusters(cfg config.Config, cwd string) ([]string, error) {
 	return clusters, nil
 }
 
+var (
+	appNameStyle = lipgloss.NewStyle().Bold(true).Foreground(output.ColorGreen)
+	tagStyle     = lipgloss.NewStyle().Foreground(output.ColorDim)
+	fileStyle    = lipgloss.NewStyle().Foreground(output.ColorCyan)
+	helmStyle    = lipgloss.NewStyle().Foreground(output.ColorYellow)
+	imageStyle   = lipgloss.NewStyle().Foreground(output.ColorMagenta)
+)
+
 func inspectCluster(cfg config.Config, cluster, cwd string) {
 	genOpts := generator.Options{App: "_", Cluster: cluster, Namespace: "_"}
 
 	clusterDir, err := generator.ResolvePath(cfg.Paths.ClusterDir, genOpts)
 	if err != nil {
-		fmt.Printf("    (error resolving cluster dir: %v)\n", err)
+		fmt.Println(output.Error.Render(fmt.Sprintf("Error resolving cluster dir: %v", err)))
 		return
 	}
 	namespacesDir, err := generator.ResolvePath(cfg.Paths.NamespacesDir, genOpts)
 	if err != nil {
-		fmt.Printf("    (error resolving namespaces dir: %v)\n", err)
+		fmt.Println(output.Error.Render(fmt.Sprintf("Error resolving namespaces dir: %v", err)))
 		return
 	}
 
 	fullClusterDir := filepath.Join(cwd, clusterDir)
 	fullNamespacesDir := filepath.Join(cwd, namespacesDir)
 
-	fmt.Printf("    Cluster dir:    %s\n", clusterDir)
-	fmt.Printf("    Namespaces dir: %s\n", namespacesDir)
-
-	// Detect actual layout by examining what's on disk
 	detectedLayout := detectLayout(fullClusterDir)
-	fmt.Printf("    Detected layout: %s\n", detectedLayout)
-
-	// Discover apps from namespaces dir
 	apps := discoverApps(fullNamespacesDir)
+
+	const kw = 10
+	clusterLines := []string{
+		output.KeyValue("Paths:", clusterDir+", "+namespacesDir, kw),
+		output.KeyValue("Layout:", detectedLayout, kw),
+		output.KeyValue("Apps:", fmt.Sprintf("%d", len(apps)), kw),
+	}
+
+	fmt.Println(output.Title.Render(fmt.Sprintf("Cluster: %s", cluster)))
+	fmt.Println(output.SectionBox.Render(strings.Join(clusterLines, "\n")))
+
 	if len(apps) == 0 {
-		fmt.Println("    Apps: (none found)")
+		fmt.Println()
 		return
 	}
 
-	fmt.Printf("    Apps: %d\n", len(apps))
 	for _, app := range apps {
+		fmt.Println()
 		inspectApp(cfg, app, cluster, fullClusterDir, fullNamespacesDir)
 	}
+	fmt.Println()
 }
 
 func detectLayout(clusterDir string) string {
 	entries, err := os.ReadDir(clusterDir)
 	if err != nil {
-		return "unknown (directory not readable)"
+		return "unknown"
 	}
 
 	hasSubdirs := false
@@ -184,7 +204,7 @@ func detectLayout(clusterDir string) string {
 	case hasSubdirs && !hasFlatKustomizations:
 		return "subdirs"
 	case hasFlatKustomizations && hasSubdirs:
-		return "mixed (both flat files and subdirectories)"
+		return "mixed"
 	default:
 		return "empty"
 	}
@@ -210,73 +230,73 @@ func inspectApp(cfg config.Config, app, cluster, clusterDir, namespacesDir strin
 	appClusterDir := generator.ResolveAppClusterDir(clusterDir, app, cfg.Paths.ClusterSubdirs)
 	appNamespacesDir := filepath.Join(namespacesDir, app)
 
-	fmt.Printf("\n    [%s/%s]\n", cluster, app)
-
-	// Check cluster dir files
+	// Collect cluster files
 	kustomizationName, _ := generator.ResolvePath(cfg.Naming.Kustomization, genOpts)
 	helmName, _ := generator.ResolvePath(cfg.Naming.Helm, genOpts)
 	gitName, _ := generator.ResolvePath(cfg.Naming.Git, genOpts)
 
-	clusterFiles := []struct {
-		name string
-		kind string
-	}{
-		{kustomizationName, "Flux Kustomization"},
-		{helmName, "Helm"},
-		{gitName, "Git"},
-	}
-
-	fmt.Println("      Cluster files:")
-	foundCluster := false
-	for _, f := range clusterFiles {
-		path := filepath.Join(appClusterDir, f.name)
+	var clusterFiles []string
+	for _, name := range []string{kustomizationName, helmName, gitName} {
+		path := filepath.Join(appClusterDir, name)
 		if _, statErr := os.Stat(path); statErr == nil {
-			fmt.Printf("        %s (%s)\n", f.name, f.kind)
-			foundCluster = true
-		}
-	}
-	if !foundCluster {
-		fmt.Println("        (none)")
-	}
-
-	// Check namespace dir files
-	fmt.Println("      Namespace files:")
-	nsEntries, err := os.ReadDir(appNamespacesDir)
-	if err != nil {
-		fmt.Println("        (directory not found)")
-		return
-	}
-	for _, e := range nsEntries {
-		if !e.IsDir() {
-			fmt.Printf("        %s\n", e.Name())
+			clusterFiles = append(clusterFiles, name)
 		}
 	}
 
-	// Show helm info if available
+	// Collect namespace files
+	var nsFiles []string
+	if nsEntries, readErr := os.ReadDir(appNamespacesDir); readErr == nil {
+		for _, e := range nsEntries {
+			if !e.IsDir() {
+				nsFiles = append(nsFiles, e.Name())
+			}
+		}
+	}
+
+	// Build app info lines
+	var lines []string
+
+	if len(clusterFiles) > 0 {
+		lines = append(lines, tagStyle.Render("cluster:"))
+		for _, f := range clusterFiles {
+			lines = append(lines, "  "+fileStyle.Render(f))
+		}
+	}
+	if len(nsFiles) > 0 {
+		lines = append(lines, tagStyle.Render("namespace:"))
+		for _, f := range nsFiles {
+			lines = append(lines, "  "+fileStyle.Render(f))
+		}
+	}
+
+	// Helm info
 	appFilter := generator.AppFilter(app, cfg.Paths.ClusterSubdirs)
 	helmInfos, scanErr := checker.ScanAllHelm(appClusterDir, appFilter)
 	if scanErr == nil && len(helmInfos) > 0 {
-		fmt.Println("      Helm:")
 		for _, info := range helmInfos {
-			fmt.Printf("        Chart:   %s\n", info.ChartName)
+			parts := []string{info.ChartName}
 			if info.CurrentVersion != "" {
-				fmt.Printf("        Version: %s\n", info.CurrentVersion)
+				parts = append(parts, info.CurrentVersion)
 			}
 			if info.RepoURL != "" {
-				fmt.Printf("        Repo:    %s\n", info.RepoURL)
+				parts = append(parts, output.Dim.Render("("+info.RepoURL+")"))
 			}
-			if info.RepoType != "" {
-				fmt.Printf("        Type:    %s\n", info.RepoType)
-			}
+			lines = append(lines, tagStyle.Render("helm: ")+helmStyle.Render(strings.Join(parts, " ")))
 		}
 	}
 
-	// Show image info if available
+	// Image info
 	images, imgErr := checker.ScanImages(appNamespacesDir)
 	if imgErr == nil && len(images) > 0 {
-		fmt.Println("      Images:")
 		for _, img := range images {
-			fmt.Printf("        %s: %s\n", img.Container, img.Image)
+			lines = append(lines, tagStyle.Render("image: ")+imageStyle.Render(img.Container+" ")+output.Value.Render(img.Image))
 		}
 	}
+
+	if len(lines) == 0 {
+		lines = append(lines, output.Dim.Render("(empty)"))
+	}
+
+	content := output.Indent.Render(strings.Join(lines, "\n"))
+	fmt.Println(appNameStyle.Render("  "+app) + "\n" + content)
 }
