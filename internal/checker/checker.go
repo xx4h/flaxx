@@ -13,6 +13,7 @@ import (
 // HelmInfo holds the extracted Helm chart information from an app's files.
 type HelmInfo struct {
 	App            string
+	Name           string // metadata.name of the HelmRelease resource
 	ChartName      string
 	CurrentVersion string
 	RepoName       string // name of the HelmRepository resource
@@ -30,6 +31,7 @@ type CheckResult struct {
 
 // helmRelease holds parsed HelmRelease data for matching to repositories.
 type helmRelease struct {
+	Name           string // metadata.name
 	ChartName      string
 	CurrentVersion string
 	Namespace      string
@@ -81,6 +83,7 @@ func ScanAllHelm(clusterDir string, appFilter string) ([]HelmInfo, error) {
 			switch res.Kind {
 			case "HelmRelease":
 				releases = append(releases, helmRelease{
+					Name:           res.Metadata.Name,
 					ChartName:      res.Spec.Chart.Spec.Chart,
 					CurrentVersion: strings.Trim(res.Spec.Chart.Spec.Version, "'\""),
 					Namespace:      res.Metadata.Namespace,
@@ -103,6 +106,7 @@ func ScanAllHelm(clusterDir string, appFilter string) ([]HelmInfo, error) {
 	var results []HelmInfo
 	for _, rel := range releases {
 		info := HelmInfo{
+			Name:           rel.Name,
 			ChartName:      rel.ChartName,
 			CurrentVersion: rel.CurrentVersion,
 			Namespace:      rel.Namespace,

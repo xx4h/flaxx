@@ -322,7 +322,11 @@ func printCheckResult(r *checker.CheckResult) {
 		output.KeyValue("Latest:", latestVal, kw),
 	}
 
-	fmt.Println(output.Subtitle.Render("Helm: " + r.ChartName))
+	name := r.Name
+	if name == "" {
+		name = r.ChartName
+	}
+	fmt.Println(output.Subtitle.Render("Helm: " + name))
 	fmt.Println(output.SectionBox.Render(strings.Join(lines, "\n")))
 
 	printUpdates(r.AvailableUpdates)
