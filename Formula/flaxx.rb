@@ -2,8 +2,8 @@ class Flaxx < Formula
   desc "Generic scaffolding and maintenance tool for FluxCD GitOps repositories"
   homepage "https://github.com/xx4h/flaxx"
   url "https://github.com/xx4h/flaxx.git",
-      tag:      "v0.1.0",
-      revision: "ab0631bb511f7141f121c86970765a9f109734c5"
+      tag:      "v0.2.0",
+      revision: "e3f738e073049716948367680f4a2c0e8cf6877c"
   license "Apache-2.0"
   head "https://github.com/xx4h/flaxx.git", branch: "main"
 
