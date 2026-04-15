@@ -170,7 +170,7 @@ func TestCheckImage(t *testing.T) {
 		Tag:       "1.2.3",
 	}
 
-	result, err := CheckImage(info)
+	result, err := CheckImage(info, FilterAll)
 	if err != nil {
 		t.Fatalf("CheckImage failed: %v", err)
 	}

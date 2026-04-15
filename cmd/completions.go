@@ -136,20 +136,20 @@ func completeHelmVersions(cmd *cobra.Command, args []string, toComplete string) 
 	info := helmInfos[0]
 	var versions []string
 	if info.RepoType == "oci" {
-		semVersions, fetchErr := checker.FetchOCIVersions(info.RepoURL, info.ChartName)
+		taggedVersions, fetchErr := checker.FetchOCIVersions(info.RepoURL, info.ChartName)
 		if fetchErr != nil {
 			return nil, cobra.ShellCompDirectiveError
 		}
-		for _, v := range semVersions {
-			versions = append(versions, v.Original())
+		for _, tv := range taggedVersions {
+			versions = append(versions, tv.Tag)
 		}
 	} else {
-		semVersions, fetchErr := checker.FetchHelmVersions(info.RepoURL, info.ChartName)
+		taggedVersions, fetchErr := checker.FetchHelmVersions(info.RepoURL, info.ChartName)
 		if fetchErr != nil {
 			return nil, cobra.ShellCompDirectiveError
 		}
-		for _, v := range semVersions {
-			versions = append(versions, v.Original())
+		for _, tv := range taggedVersions {
+			versions = append(versions, tv.Tag)
 		}
 	}
 

@@ -18,6 +18,8 @@ var (
 	checkNamespace string
 	checkAll       bool
 	checkHelm      []string
+	checkStable    bool
+	checkInclPre   bool
 )
 
 var checkCmd = &cobra.Command{
@@ -41,6 +43,12 @@ Examples:
   # Check specific helm charts only
   flaxx check k8s myapp --helm grafana --helm loki
 
+  # Show only stable versions
+  flaxx check k8s myapp --stable
+
+  # Show all versions including prereleases
+  flaxx check k8s myapp --include-pre
+
   # Check with namespace override
   flaxx check k8s myapp -n custom-ns`,
 	Args:              cobra.RangeArgs(1, 2),
@@ -52,6 +60,10 @@ func init() {
 	checkCmd.Flags().StringVarP(&checkNamespace, "namespace", "n", "", "override namespace (default: app name)")
 	checkCmd.Flags().BoolVarP(&checkAll, "all", "a", false, "check all apps in the cluster")
 	checkCmd.Flags().StringSliceVar(&checkHelm, "helm", nil, "check specific helm chart(s) by name (repeatable)")
+	checkCmd.Flags().BoolVar(&checkStable, "stable", false, "show only stable versions")
+	checkCmd.Flags().BoolVar(&checkInclPre, "include-pre", false, "show all versions including prereleases")
+
+	checkCmd.MarkFlagsMutuallyExclusive("stable", "include-pre")
 
 	rootCmd.AddCommand(checkCmd)
 }
@@ -128,7 +140,7 @@ func runCheckApp(cfg config.Config, app, cluster, cwd string) error {
 			if helmFilter != nil && !helmFilter[helmInfos[i].ChartName] {
 				continue
 			}
-			result, checkErr := checker.CheckHelm(&helmInfos[i])
+			result, checkErr := checker.CheckHelm(&helmInfos[i], resolveFilterMode())
 			if checkErr != nil {
 				fmt.Fprintf(os.Stderr, "Warning: checking helm versions for %s: %v\n", helmInfos[i].ChartName, checkErr)
 				continue
@@ -146,7 +158,7 @@ func runCheckApp(cfg config.Config, app, cluster, cwd string) error {
 	if imgScanErr == nil && len(images) > 0 {
 		var imgErrors []string
 		for _, img := range images {
-			result, imgCheckErr := checker.CheckImage(img)
+			result, imgCheckErr := checker.CheckImage(img, resolveFilterMode())
 			if imgCheckErr != nil {
 				imgErrors = append(imgErrors, fmt.Sprintf("%s: %v", img.Image, imgCheckErr))
 				continue
@@ -220,7 +232,7 @@ func runCheckAll(cfg config.Config, cluster, cwd string) error {
 				if helmFilter != nil && !helmFilter[helmInfos[i].ChartName] {
 					continue
 				}
-				result, checkErr := checker.CheckHelm(&helmInfos[i])
+				result, checkErr := checker.CheckHelm(&helmInfos[i], resolveFilterMode())
 				if checkErr != nil {
 					checkErrors = append(checkErrors, fmt.Sprintf("%s (helm %s): %v", app, helmInfos[i].ChartName, checkErr))
 					continue
@@ -238,7 +250,7 @@ func runCheckAll(cfg config.Config, cluster, cwd string) error {
 		images, imgScanErr := checker.ScanImages(appNsDir)
 		if imgScanErr == nil {
 			for _, img := range images {
-				result, imgCheckErr := checker.CheckImage(img)
+				result, imgCheckErr := checker.CheckImage(img, resolveFilterMode())
 				if imgCheckErr != nil {
 					checkErrors = append(checkErrors, fmt.Sprintf("%s (image %s): %v", app, img.Image, imgCheckErr))
 					continue
@@ -262,6 +274,16 @@ func runCheckAll(cfg config.Config, cluster, cwd string) error {
 	}
 
 	return nil
+}
+
+func resolveFilterMode() checker.FilterMode {
+	if checkStable {
+		return checker.FilterStable
+	}
+	if checkInclPre {
+		return checker.FilterAll
+	}
+	return checker.FilterAuto
 }
 
 // buildHelmFilter returns a set of chart names to check, or nil if no filter is set.

@@ -6,11 +6,8 @@ import (
 	"io"
 	"net/http"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
-
-	"github.com/Masterminds/semver/v3"
 )
 
 // tagList represents the OCI distribution API tag list response.
@@ -33,7 +30,7 @@ func defaultHTTPClient() *http.Client {
 
 // FetchOCIVersions queries an OCI registry for available tags of a chart,
 // sorted newest first.
-func FetchOCIVersions(repoURL, chartName string) ([]*semver.Version, error) {
+func FetchOCIVersions(repoURL, chartName string) ([]TaggedVersion, error) {
 	// Parse OCI URL: oci://registry.example.com/path -> registry.example.com, path/chartName
 	registry, repository, err := parseOCIURL(repoURL, chartName)
 	if err != nil {
@@ -47,18 +44,7 @@ func FetchOCIVersions(repoURL, chartName string) ([]*semver.Version, error) {
 		return nil, err
 	}
 
-	var versions []*semver.Version
-	for _, tag := range tags {
-		v, err := semver.NewVersion(tag)
-		if err != nil {
-			continue // skip non-semver tags
-		}
-		versions = append(versions, v)
-	}
-
-	sort.Sort(sort.Reverse(semver.Collection(versions)))
-
-	return versions, nil
+	return ParseTaggedVersions(tags), nil
 }
 
 // parseOCIURL extracts the registry host and repository path from an OCI URL.

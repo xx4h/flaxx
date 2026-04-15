@@ -78,8 +78,8 @@ func TestFetchOCIVersions(t *testing.T) {
 	}
 
 	// Should be sorted newest first
-	if versions[0].Original() != "2.0.0" {
-		t.Errorf("first version = %q, want %q", versions[0].Original(), "2.0.0")
+	if versions[0].Tag != "2.0.0" {
+		t.Errorf("first version = %q, want %q", versions[0].Tag, "2.0.0")
 	}
 }
 
@@ -173,8 +173,8 @@ func TestFetchOCIVersions_Pagination(t *testing.T) {
 		t.Fatalf("got %d versions, want 5 (across 3 pages)", len(versions))
 	}
 
-	if versions[0].Original() != "3.0.0" {
-		t.Errorf("latest version = %q, want %q", versions[0].Original(), "3.0.0")
+	if versions[0].Tag != "3.0.0" {
+		t.Errorf("latest version = %q, want %q", versions[0].Tag, "3.0.0")
 	}
 }
 
@@ -227,7 +227,7 @@ func TestCheckHelm_OCI(t *testing.T) {
 		RepoType:       "oci",
 	}
 
-	result, err := CheckHelm(info)
+	result, err := CheckHelm(info, FilterAll)
 	if err != nil {
 		t.Fatalf("CheckHelm failed: %v", err)
 	}

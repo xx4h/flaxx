@@ -43,6 +43,8 @@ func resetFlags() {
 	checkNamespace = ""
 	checkAll = false
 	checkHelm = nil
+	checkStable = false
+	checkInclPre = false
 }
 
 // executeCommand runs the root command with the given args and returns stdout output.

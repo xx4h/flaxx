@@ -4,11 +4,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sort"
 	"strings"
 	"time"
 
-	"github.com/Masterminds/semver/v3"
 	"gopkg.in/yaml.v3"
 )
 
@@ -23,7 +21,7 @@ type chartEntry struct {
 
 // FetchHelmVersions queries a Helm repository and returns available versions
 // for the given chart, sorted newest first.
-func FetchHelmVersions(repoURL, chartName string) ([]*semver.Version, error) {
+func FetchHelmVersions(repoURL, chartName string) ([]TaggedVersion, error) {
 	indexURL := strings.TrimRight(repoURL, "/") + "/index.yaml"
 
 	client := &http.Client{Timeout: 30 * time.Second}
@@ -57,24 +55,20 @@ func FetchHelmVersions(repoURL, chartName string) ([]*semver.Version, error) {
 			chartName, strings.Join(available, ", "))
 	}
 
-	var versions []*semver.Version
+	var rawTags []string
 	for _, entry := range entries {
-		v, err := semver.NewVersion(entry.Version)
-		if err != nil {
-			continue // skip non-semver versions
-		}
-		versions = append(versions, v)
+		rawTags = append(rawTags, entry.Version)
 	}
-
-	sort.Sort(sort.Reverse(semver.Collection(versions)))
+	versions := ParseTaggedVersions(rawTags)
 
 	return versions, nil
 }
 
 // CheckHelm fetches available versions and compares against the current version.
 // Supports both standard Helm repositories and OCI registries.
-func CheckHelm(info *HelmInfo) (*CheckResult, error) {
-	var versions []*semver.Version
+// The filter mode controls which version channels are shown.
+func CheckHelm(info *HelmInfo, mode FilterMode) (*CheckResult, error) {
+	var versions []TaggedVersion
 	var err error
 
 	if info.RepoType == "oci" {
@@ -90,28 +84,32 @@ func CheckHelm(info *HelmInfo) (*CheckResult, error) {
 		HelmInfo: *info,
 	}
 
-	if len(versions) > 0 {
-		result.LatestVersion = versions[0].Original()
-	}
-
 	// Find versions newer than current
 	if info.CurrentVersion != "" {
-		current, err := semver.NewVersion(info.CurrentVersion)
-		if err == nil {
-			for _, v := range versions {
-				if v.GreaterThan(current) {
-					result.AvailableUpdates = append(result.AvailableUpdates, v.Original())
+		current := ParseVersion(info.CurrentVersion)
+		if current != nil {
+			filtered := FilterTaggedVersions(versions, current, mode)
+			for _, tv := range filtered {
+				if tv.Version.GreaterThan(current) {
+					result.AvailableUpdates = append(result.AvailableUpdates, tv.Tag)
 				}
+			}
+			if len(filtered) > 0 {
+				result.LatestVersion = filtered[0].Tag
 			}
 		}
 	} else {
-		// No current version pinned — show latest versions
-		limit := 10
-		if len(versions) < limit {
-			limit = len(versions)
+		// No current version pinned — filter and show latest versions
+		filtered := FilterTaggedVersions(versions, nil, mode)
+		if len(filtered) > 0 {
+			result.LatestVersion = filtered[0].Tag
 		}
-		for _, v := range versions[:limit] {
-			result.AvailableUpdates = append(result.AvailableUpdates, v.Original())
+		limit := 10
+		if len(filtered) < limit {
+			limit = len(filtered)
+		}
+		for _, tv := range filtered[:limit] {
+			result.AvailableUpdates = append(result.AvailableUpdates, tv.Tag)
 		}
 	}
 
