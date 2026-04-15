@@ -4,10 +4,8 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sort"
 	"strings"
 
-	"github.com/Masterminds/semver/v3"
 	"gopkg.in/yaml.v3"
 )
 
@@ -53,33 +51,25 @@ func ScanImages(dir string) ([]ImageInfo, error) {
 }
 
 // FetchImageTags queries the container registry for available tags of an image,
-// returning semver tags sorted newest first.
+// returning original tags sorted by semver newest first.
 func FetchImageTags(info ImageInfo) ([]string, error) {
 	tags, err := fetchTagsFunc(defaultHTTPClient(), info.Registry, info.Repo)
 	if err != nil {
 		return nil, fmt.Errorf("fetching tags for %s/%s: %w", info.Registry, info.Repo, err)
 	}
 
-	var versions []*semver.Version
-	for _, tag := range tags {
-		v, err := semver.NewVersion(tag)
-		if err != nil {
-			continue
-		}
-		versions = append(versions, v)
-	}
-	sort.Sort(sort.Reverse(semver.Collection(versions)))
+	versions := ParseTaggedVersions(tags)
 
 	result := make([]string, len(versions))
-	for i, v := range versions {
-		result[i] = v.Original()
+	for i, tv := range versions {
+		result[i] = tv.Tag
 	}
 	return result, nil
 }
 
 // CheckImage queries the container registry for available tags and compares
-// against the current tag.
-func CheckImage(info ImageInfo) (*ImageCheckResult, error) {
+// against the current tag. The filter mode controls which version channels are shown.
+func CheckImage(info ImageInfo, mode FilterMode) (*ImageCheckResult, error) {
 	tags, err := fetchTagsFunc(defaultHTTPClient(), info.Registry, info.Repo)
 	if err != nil {
 		return nil, fmt.Errorf("fetching tags for %s/%s: %w", info.Registry, info.Repo, err)
@@ -89,26 +79,18 @@ func CheckImage(info ImageInfo) (*ImageCheckResult, error) {
 		ImageInfo: info,
 	}
 
-	var versions []*semver.Version
-	for _, tag := range tags {
-		v, err := semver.NewVersion(tag)
-		if err != nil {
-			continue
-		}
-		versions = append(versions, v)
-	}
-	sort.Sort(sort.Reverse(semver.Collection(versions)))
-
-	if len(versions) > 0 {
-		result.LatestVersion = versions[0].Original()
-	}
+	versions := ParseTaggedVersions(tags)
 
 	if info.Tag != "" {
-		current, err := semver.NewVersion(info.Tag)
-		if err == nil {
-			for _, v := range versions {
-				if v.GreaterThan(current) {
-					result.AvailableUpdates = append(result.AvailableUpdates, v.Original())
+		current := ParseVersion(info.Tag)
+		if current != nil {
+			filtered := FilterTaggedVersions(versions, current, mode)
+			if len(filtered) > 0 {
+				result.LatestVersion = filtered[0].Tag
+			}
+			for _, tv := range filtered {
+				if tv.Version.GreaterThan(current) {
+					result.AvailableUpdates = append(result.AvailableUpdates, tv.Tag)
 				}
 			}
 		}

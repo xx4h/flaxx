@@ -40,8 +40,8 @@ func TestFetchHelmVersions(t *testing.T) {
 	}
 
 	// Should be sorted newest first
-	if versions[0].Original() != "2.1.0-rc.1" {
-		t.Errorf("first version = %q, want %q", versions[0].Original(), "2.1.0-rc.1")
+	if versions[0].Tag != "2.1.0-rc.1" {
+		t.Errorf("first version = %q, want %q", versions[0].Tag, "2.1.0-rc.1")
 	}
 }
 
@@ -70,7 +70,7 @@ func TestCheckHelm(t *testing.T) {
 		RepoURL:        server.URL,
 	}
 
-	result, err := CheckHelm(info)
+	result, err := CheckHelm(info, FilterAll)
 	if err != nil {
 		t.Fatalf("CheckHelm failed: %v", err)
 	}
@@ -103,7 +103,7 @@ entries:
 		RepoURL:        server.URL,
 	}
 
-	result, err := CheckHelm(info)
+	result, err := CheckHelm(info, FilterAll)
 	if err != nil {
 		t.Fatalf("CheckHelm failed: %v", err)
 	}
