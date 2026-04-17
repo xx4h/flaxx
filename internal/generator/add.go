@@ -77,24 +77,24 @@ func RunAdd(cfg config.Config, opts AddOptions, repoRoot string) (*Result, error
 		}
 		extraData.Vars = vars
 
-		for _, fileName := range extra.Files {
-			filePath := filepath.Join(extra.Dir, fileName)
+		for _, file := range extra.Files {
+			filePath := filepath.Join(extra.Dir, file.RelPath)
 			content, err := extras.RenderFile(filePath, extraData)
 			if err != nil {
-				return nil, fmt.Errorf("rendering extra %q file %s: %w", extraName, fileName, err)
+				return nil, fmt.Errorf("rendering extra %q file %s: %w", extraName, file.RelPath, err)
 			}
 
 			target := appNamespacesDir
-			if extra.Meta.Target == TargetCluster {
+			if file.Target == extras.TargetCluster {
 				target = appClusterDir
 			}
 
-			outPath := filepath.Join(target, fileName)
+			outPath := filepath.Join(target, file.OutName)
 			if err := writeFile(outPath, content, opts.DryRun, &result); err != nil {
 				return nil, err
 			}
-			if extra.Meta.Target != TargetCluster {
-				newNsFiles = append(newNsFiles, fileName)
+			if file.Target != extras.TargetCluster {
+				newNsFiles = append(newNsFiles, file.OutName)
 			}
 		}
 	}

@@ -11,6 +11,17 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const (
+	// TargetCluster places rendered files in the cluster directory.
+	TargetCluster = "cluster"
+	// TargetNamespaces places rendered files in the namespaces directory (the
+	// default when Meta.Target is empty).
+	TargetNamespaces = "namespaces"
+	// TargetSplit routes files based on which subdirectory ("cluster/" or
+	// "namespaces/") they live in inside the template directory.
+	TargetSplit = "split"
+)
+
 type Variable struct {
 	Description string `yaml:"description"`
 	Default     string `yaml:"default"`
@@ -23,10 +34,21 @@ type Meta struct {
 	Variables   map[string]Variable `yaml:"variables"`
 }
 
+// File is one rendered file within an Extra, with its resolved target.
+type File struct {
+	// RelPath is the file path relative to the Extra.Dir — e.g. "ingress.yaml"
+	// or "cluster/myapp-helm.yml" for split extras.
+	RelPath string
+	// OutName is the filename to write at the target directory.
+	OutName string
+	// Target is either TargetCluster or TargetNamespaces.
+	Target string
+}
+
 type Extra struct {
 	Meta  Meta
 	Dir   string
-	Files []string
+	Files []File
 }
 
 type ExtraData struct {
@@ -64,7 +86,7 @@ func Discover(templatesDir string) ([]Extra, error) {
 			return nil, fmt.Errorf("parsing %s: %w", metaPath, unmarshalErr)
 		}
 
-		files, err := listTemplateFiles(extraDir)
+		files, err := listTemplateFiles(extraDir, meta.Target)
 		if err != nil {
 			return nil, err
 		}
@@ -169,18 +191,87 @@ func resolveValue(value string, data ExtraData) (string, error) {
 	return buf.String(), nil
 }
 
-func listTemplateFiles(dir string) ([]string, error) {
+// DefaultTargetForFile returns the target for a file in an extra that does not
+// use split layout.
+func DefaultTargetForFile(meta Meta) string {
+	if meta.Target == TargetCluster {
+		return TargetCluster
+	}
+	return TargetNamespaces
+}
+
+// listTemplateFiles enumerates the rendered files in an extra directory.
+// For split extras, it walks cluster/ and namespaces/ subdirectories and
+// errors on stray files at the root. For flat extras, it lists files in the
+// root directory only and skips _meta.yaml.
+func listTemplateFiles(dir, target string) ([]File, error) {
+	if target == TargetSplit {
+		return listSplitFiles(dir)
+	}
+
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, fmt.Errorf("reading extra dir %s: %w", dir, err)
 	}
 
-	var files []string
+	fileTarget := TargetNamespaces
+	if target == TargetCluster {
+		fileTarget = TargetCluster
+	}
+
+	var files []File
 	for _, entry := range entries {
 		if entry.IsDir() || entry.Name() == "_meta.yaml" {
 			continue
 		}
-		files = append(files, entry.Name())
+		files = append(files, File{
+			RelPath: entry.Name(),
+			OutName: entry.Name(),
+			Target:  fileTarget,
+		})
+	}
+	return files, nil
+}
+
+func listSplitFiles(dir string) ([]File, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("reading extra dir %s: %w", dir, err)
+	}
+
+	var files []File
+	for _, entry := range entries {
+		name := entry.Name()
+		if name == "_meta.yaml" {
+			continue
+		}
+		if !entry.IsDir() {
+			return nil, fmt.Errorf("split extra %s: stray file %q at root (must live in cluster/ or namespaces/)", dir, name)
+		}
+		var subTarget string
+		switch name {
+		case "cluster":
+			subTarget = TargetCluster
+		case "namespaces":
+			subTarget = TargetNamespaces
+		default:
+			return nil, fmt.Errorf("split extra %s: unexpected subdirectory %q (only cluster/ and namespaces/ are allowed)", dir, name)
+		}
+		subDir := filepath.Join(dir, name)
+		subEntries, subErr := os.ReadDir(subDir)
+		if subErr != nil {
+			return nil, fmt.Errorf("reading %s: %w", subDir, subErr)
+		}
+		for _, sub := range subEntries {
+			if sub.IsDir() {
+				return nil, fmt.Errorf("split extra %s: nested directory %q not supported", subDir, sub.Name())
+			}
+			files = append(files, File{
+				RelPath: filepath.Join(name, sub.Name()),
+				OutName: sub.Name(),
+				Target:  subTarget,
+			})
+		}
 	}
 	return files, nil
 }

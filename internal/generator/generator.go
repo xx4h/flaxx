@@ -22,8 +22,9 @@ const (
 	TypeExtHelm  DeployType = "ext-helm"
 	TypeExtOCI   DeployType = "ext-oci"
 
-	// TargetCluster is the target value for extras that go into the cluster directory.
-	TargetCluster = "cluster"
+	// TargetCluster is an alias for extras.TargetCluster, kept for callers
+	// that already imported it via the generator package.
+	TargetCluster = extras.TargetCluster
 )
 
 type Options struct {
@@ -285,24 +286,24 @@ func processExtras(cfg config.Config, opts Options, repoRoot, appClusterDir, app
 		}
 		extraData.Vars = vars
 
-		for _, fileName := range extra.Files {
-			filePath := filepath.Join(extra.Dir, fileName)
+		for _, file := range extra.Files {
+			filePath := filepath.Join(extra.Dir, file.RelPath)
 			content, err := extras.RenderFile(filePath, extraData)
 			if err != nil {
-				return nil, fmt.Errorf("rendering extra %q file %s: %w", extraName, fileName, err)
+				return nil, fmt.Errorf("rendering extra %q file %s: %w", extraName, file.RelPath, err)
 			}
 
 			target := appNamespacesDir
-			if extra.Meta.Target == TargetCluster {
+			if file.Target == extras.TargetCluster {
 				target = appClusterDir
 			}
 
-			outPath := filepath.Join(target, fileName)
+			outPath := filepath.Join(target, file.OutName)
 			if err := writeFile(outPath, content, opts.DryRun, result); err != nil {
 				return nil, err
 			}
-			if extra.Meta.Target != TargetCluster {
-				extraFiles = append(extraFiles, fileName)
+			if file.Target != extras.TargetCluster {
+				extraFiles = append(extraFiles, file.OutName)
 			}
 		}
 	}

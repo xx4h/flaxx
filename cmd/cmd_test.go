@@ -45,6 +45,11 @@ func resetFlags() {
 	checkHelm = nil
 	checkStable = false
 	checkInclPre = false
+	fromAppIncludeCluster = false
+	fromAppInteractive = false
+	fromAppForce = false
+	fromAppDryRun = false
+	fromAppDescription = ""
 }
 
 // executeCommand runs the root command with the given args and returns stdout output.
@@ -310,5 +315,102 @@ func TestCheckArgOrder(t *testing.T) {
 	wrongDir := filepath.Join(dir, "clusters", "myapp", "production")
 	if _, err := os.Stat(wrongDir); err == nil {
 		t.Error("checked wrong directory — args are swapped")
+	}
+}
+
+func TestTemplateFromAppRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+
+	// Scaffold a helm app via the `generate` command so we exercise the
+	// real code path and can round-trip through `template from-app`.
+	origDir, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(origDir)
+
+	if _, err := executeCommand("generate", "lab", "podinfo", "-t", "core-helm",
+		"--helm-url", "https://stefanprodan.github.io/podinfo",
+		"--helm-version", "6.5.0"); err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+
+	// Add a parameterizable ingress resource to the namespace dir.
+	ingressPath := filepath.Join(dir, "clusters", "lab-namespaces", "podinfo", "ingress.yaml")
+	ingress := `---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: podinfo
+spec:
+  rules:
+    - host: podinfo.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: podinfo
+                port:
+                  number: 80
+`
+	os.WriteFile(ingressPath, []byte(ingress), 0o644)
+
+	out, err := executeCommand("template", "from-app", "lab", "podinfo", "my-podinfo")
+	if err != nil {
+		t.Fatalf("template from-app: %v (out: %s)", err, out)
+	}
+
+	meta, err := os.ReadFile(filepath.Join(dir, ".flaxx", "templates", "my-podinfo", "_meta.yaml"))
+	if err != nil {
+		t.Fatalf("_meta.yaml missing: %v", err)
+	}
+	if !strings.Contains(string(meta), "chart_version") {
+		t.Errorf("_meta.yaml missing chart_version:\n%s", string(meta))
+	}
+	if !strings.Contains(string(meta), "ingress_host") {
+		t.Errorf("_meta.yaml missing ingress_host:\n%s", string(meta))
+	}
+
+	ingressTemplate, err := os.ReadFile(filepath.Join(dir, ".flaxx", "templates", "my-podinfo", "ingress.yaml"))
+	if err != nil {
+		t.Fatalf("ingress.yaml missing: %v", err)
+	}
+	its := string(ingressTemplate)
+	if strings.Contains(its, "podinfo.example.com") {
+		t.Errorf("ingress.yaml should have ingress host replaced:\n%s", its)
+	}
+	if !strings.Contains(its, "{{.ingress_host}}") {
+		t.Errorf("ingress.yaml should contain {{.ingress_host}}:\n%s", its)
+	}
+}
+
+func TestTemplateFromAppIncludeCluster(t *testing.T) {
+	dir := t.TempDir()
+	origDir, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(origDir)
+
+	if _, err := executeCommand("generate", "lab", "podinfo", "-t", "core-helm",
+		"--helm-url", "https://stefanprodan.github.io/podinfo",
+		"--helm-version", "6.5.0"); err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+
+	if _, err := executeCommand("template", "from-app", "lab", "podinfo", "my-full",
+		"--include-cluster"); err != nil {
+		t.Fatalf("template from-app: %v", err)
+	}
+
+	clusterFile := filepath.Join(dir, ".flaxx", "templates", "my-full", "cluster", "podinfo-helm.yml")
+	if _, err := os.Stat(clusterFile); err != nil {
+		t.Fatalf("cluster/ file missing: %v", err)
+	}
+	nsFile := filepath.Join(dir, ".flaxx", "templates", "my-full", "namespaces", "namespace.yaml")
+	if _, err := os.Stat(nsFile); err != nil {
+		t.Fatalf("namespaces/ file missing: %v", err)
+	}
+	meta, _ := os.ReadFile(filepath.Join(dir, ".flaxx", "templates", "my-full", "_meta.yaml"))
+	if !strings.Contains(string(meta), "target: split") {
+		t.Errorf("_meta.yaml should have target split:\n%s", string(meta))
 	}
 }

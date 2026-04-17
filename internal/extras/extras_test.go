@@ -202,3 +202,82 @@ func searchString(s, substr string) bool {
 	}
 	return false
 }
+
+func TestDiscoverSplitTarget(t *testing.T) {
+	dir := t.TempDir()
+
+	extraDir := filepath.Join(dir, "fullapp")
+	for _, sub := range []string{"cluster", "namespaces"} {
+		if err := os.MkdirAll(filepath.Join(extraDir, sub), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	meta := `name: fullapp
+description: Full-app template
+target: split
+`
+	if err := os.WriteFile(filepath.Join(extraDir, "_meta.yaml"), []byte(meta), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(extraDir, "cluster", "app-helm.yml"), []byte("# helm"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(extraDir, "namespaces", "namespace.yaml"), []byte("# ns"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	found, err := Discover(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(found) != 1 {
+		t.Fatalf("expected 1 extra, got %d", len(found))
+	}
+	if found[0].Meta.Target != TargetSplit {
+		t.Errorf("expected target split, got %s", found[0].Meta.Target)
+	}
+	if len(found[0].Files) != 2 {
+		t.Fatalf("expected 2 files, got %d", len(found[0].Files))
+	}
+
+	var clusterSeen, nsSeen bool
+	for _, f := range found[0].Files {
+		switch f.Target {
+		case TargetCluster:
+			clusterSeen = true
+			if f.OutName != "app-helm.yml" {
+				t.Errorf("expected cluster file app-helm.yml, got %s", f.OutName)
+			}
+		case TargetNamespaces:
+			nsSeen = true
+			if f.OutName != "namespace.yaml" {
+				t.Errorf("expected namespace file namespace.yaml, got %s", f.OutName)
+			}
+		}
+	}
+	if !clusterSeen || !nsSeen {
+		t.Errorf("expected both cluster and namespace files, cluster=%v ns=%v", clusterSeen, nsSeen)
+	}
+}
+
+func TestDiscoverSplitRejectsStrayFile(t *testing.T) {
+	dir := t.TempDir()
+	extraDir := filepath.Join(dir, "bad")
+	if err := os.MkdirAll(filepath.Join(extraDir, "cluster"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	meta := `name: bad
+target: split
+`
+	if err := os.WriteFile(filepath.Join(extraDir, "_meta.yaml"), []byte(meta), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(extraDir, "stray.yaml"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Discover(dir); err == nil {
+		t.Fatal("expected error for stray file in split extra")
+	}
+}
