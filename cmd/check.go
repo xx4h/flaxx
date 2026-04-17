@@ -5,9 +5,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/xx4h/flaxx/internal/cache"
 	"github.com/xx4h/flaxx/internal/checker"
 	"github.com/xx4h/flaxx/internal/config"
 	"github.com/xx4h/flaxx/internal/generator"
@@ -20,6 +22,8 @@ var (
 	checkHelm      []string
 	checkStable    bool
 	checkInclPre   bool
+	checkNoCache   bool
+	checkCacheTTL  time.Duration
 )
 
 var checkCmd = &cobra.Command{
@@ -62,6 +66,8 @@ func init() {
 	checkCmd.Flags().StringSliceVar(&checkHelm, "helm", nil, "check specific helm chart(s) by name (repeatable)")
 	checkCmd.Flags().BoolVar(&checkStable, "stable", false, "show only stable versions")
 	checkCmd.Flags().BoolVar(&checkInclPre, "include-pre", false, "show all versions including prereleases")
+	checkCmd.Flags().BoolVar(&checkNoCache, "no-cache", false, "ignore cached registry results (still refreshes the cache)")
+	checkCmd.Flags().DurationVar(&checkCacheTTL, "cache-ttl", 0, "override cache TTL (e.g. 15m, 2h); 0 uses config")
 
 	checkCmd.MarkFlagsMutuallyExclusive("stable", "include-pre")
 
@@ -102,11 +108,44 @@ func runCheck(_ *cobra.Command, args []string) error {
 		}
 	}
 
+	installCache(cfg.Cache, checkCacheTTL, checkNoCache)
+
 	if checkAll {
 		return runCheckAll(cfg, cluster, cwd)
 	}
 
 	return runCheckApp(cfg, app, cluster, cwd)
+}
+
+// installCache builds a cache from config + CLI overrides and injects it
+// into the checker package. A warning is printed if the cache dir cannot
+// be resolved — commands keep working, just without caching.
+func installCache(cfg config.Cache, ttlFlag time.Duration, noCache bool) {
+	ttl := resolveCacheTTL(cfg.TTL, ttlFlag)
+	c, err := cache.New(ttl, cfg.Enabled)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: disabling cache: %v\n", err)
+		checker.SetCache(nil)
+		return
+	}
+	if noCache {
+		c = c.WithBypassRead()
+	}
+	checker.SetCache(c)
+}
+
+// resolveCacheTTL prefers the CLI flag; falls back to the configured TTL;
+// finally defaults to one hour if neither is a valid duration.
+func resolveCacheTTL(configTTL string, flag time.Duration) time.Duration {
+	if flag > 0 {
+		return flag
+	}
+	if configTTL != "" {
+		if d, err := time.ParseDuration(configTTL); err == nil {
+			return d
+		}
+	}
+	return time.Hour
 }
 
 func runCheckApp(cfg config.Config, app, cluster, cwd string) error {

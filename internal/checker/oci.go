@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/xx4h/flaxx/internal/cache"
 )
 
 // tagList represents the OCI distribution API tag list response.
@@ -30,6 +32,10 @@ func defaultHTTPClient() *http.Client {
 
 // FetchOCIVersions queries an OCI registry for available tags of a chart,
 // sorted newest first.
+//
+// Results are cached via the package-level cache (see SetCache). The cache
+// keyspace is shared with FetchImageTags since both drive the same
+// /v2/{repo}/tags/list endpoint.
 func FetchOCIVersions(repoURL, chartName string) ([]TaggedVersion, error) {
 	// Parse OCI URL: oci://registry.example.com/path -> registry.example.com, path/chartName
 	registry, repository, err := parseOCIURL(repoURL, chartName)
@@ -37,14 +43,33 @@ func FetchOCIVersions(repoURL, chartName string) ([]TaggedVersion, error) {
 		return nil, err
 	}
 
-	client := &http.Client{Timeout: 30 * time.Second}
-
-	tags, err := fetchTagsFunc(client, registry, repository)
+	tags, err := cachedFetchTags(registry, repository)
 	if err != nil {
 		return nil, err
 	}
 
 	return ParseTaggedVersions(tags), nil
+}
+
+// cachedFetchTags wraps fetchTagsFunc with a cache read/write. Callers
+// use this instead of invoking fetchTagsFunc directly so that all OCI
+// tag lookups share one keyspace.
+func cachedFetchTags(registry, repository string) ([]string, error) {
+	key := cache.Key(cachePrefixOCI, registry, repository)
+
+	var tags []string
+	hit, _ := activeCache.Get(key, &tags)
+	if hit {
+		return tags, nil
+	}
+
+	tags, err := fetchTagsFunc(defaultHTTPClient(), registry, repository)
+	if err != nil {
+		return nil, err
+	}
+
+	_ = activeCache.Set(key, tags)
+	return tags, nil
 }
 
 // parseOCIURL extracts the registry host and repository path from an OCI URL.

@@ -52,8 +52,11 @@ func ScanImages(dir string) ([]ImageInfo, error) {
 
 // FetchImageTags queries the container registry for available tags of an image,
 // returning original tags sorted by semver newest first.
+//
+// Results are cached via the package-level cache (see SetCache), sharing the
+// OCI keyspace with FetchOCIVersions.
 func FetchImageTags(info ImageInfo) ([]string, error) {
-	tags, err := fetchTagsFunc(defaultHTTPClient(), info.Registry, info.Repo)
+	tags, err := cachedFetchTags(info.Registry, info.Repo)
 	if err != nil {
 		return nil, fmt.Errorf("fetching tags for %s/%s: %w", info.Registry, info.Repo, err)
 	}
@@ -70,7 +73,7 @@ func FetchImageTags(info ImageInfo) ([]string, error) {
 // CheckImage queries the container registry for available tags and compares
 // against the current tag. The filter mode controls which version channels are shown.
 func CheckImage(info ImageInfo, mode FilterMode) (*ImageCheckResult, error) {
-	tags, err := fetchTagsFunc(defaultHTTPClient(), info.Registry, info.Repo)
+	tags, err := cachedFetchTags(info.Registry, info.Repo)
 	if err != nil {
 		return nil, fmt.Errorf("fetching tags for %s/%s: %w", info.Registry, info.Repo, err)
 	}
