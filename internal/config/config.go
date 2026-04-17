@@ -27,10 +27,16 @@ type Naming struct {
 	NsKustomization string `yaml:"ns_kustomization"`
 }
 
+type Cache struct {
+	Enabled bool   `yaml:"enabled"`
+	TTL     string `yaml:"ttl"`
+}
+
 type Config struct {
 	Defaults     Defaults `yaml:"defaults"`
 	Paths        Paths    `yaml:"paths"`
 	Naming       Naming   `yaml:"naming"`
+	Cache        Cache    `yaml:"cache"`
 	TemplatesDir string   `yaml:"templates_dir"`
 }
 
@@ -51,6 +57,10 @@ func DefaultConfig() Config {
 			Git:             "{{.App}}-git.yml",
 			Namespace:       "namespace.yaml",
 			NsKustomization: "kustomization.yaml",
+		},
+		Cache: Cache{
+			Enabled: true,
+			TTL:     "1h",
 		},
 		TemplatesDir: ".flaxx/templates",
 	}

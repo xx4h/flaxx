@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/xx4h/flaxx/internal/cache"
 )
 
 // repoIndex represents a Helm repository index.yaml.
@@ -21,7 +23,31 @@ type chartEntry struct {
 
 // FetchHelmVersions queries a Helm repository and returns available versions
 // for the given chart, sorted newest first.
+//
+// Results are cached via the package-level cache (see SetCache). Cache hits
+// skip the HTTP round-trip and the full index.yaml parse.
 func FetchHelmVersions(repoURL, chartName string) ([]TaggedVersion, error) {
+	key := cache.Key(cachePrefixHelm, repoURL, chartName)
+
+	var rawTags []string
+	hit, _ := activeCache.Get(key, &rawTags)
+	if hit {
+		return ParseTaggedVersions(rawTags), nil
+	}
+
+	rawTags, err := fetchHelmRawVersions(repoURL, chartName)
+	if err != nil {
+		return nil, err
+	}
+
+	_ = activeCache.Set(key, rawTags)
+
+	return ParseTaggedVersions(rawTags), nil
+}
+
+// fetchHelmRawVersions performs the live HTTP fetch and returns the raw,
+// unparsed version strings from the repository index.
+func fetchHelmRawVersions(repoURL, chartName string) ([]string, error) {
 	indexURL := strings.TrimRight(repoURL, "/") + "/index.yaml"
 
 	client := &http.Client{Timeout: 30 * time.Second}
@@ -55,13 +81,11 @@ func FetchHelmVersions(repoURL, chartName string) ([]TaggedVersion, error) {
 			chartName, strings.Join(available, ", "))
 	}
 
-	var rawTags []string
+	rawTags := make([]string, 0, len(entries))
 	for _, entry := range entries {
 		rawTags = append(rawTags, entry.Version)
 	}
-	versions := ParseTaggedVersions(rawTags)
-
-	return versions, nil
+	return rawTags, nil
 }
 
 // CheckHelm fetches available versions and compares against the current version.

@@ -4,9 +4,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/xx4h/flaxx/internal/cache"
 	"github.com/xx4h/flaxx/internal/checker"
 	"github.com/xx4h/flaxx/internal/config"
 	"github.com/xx4h/flaxx/internal/generator"
@@ -271,6 +273,9 @@ func splitImageArg(s string) (string, string) {
 }
 
 // loadCompletionConfig loads config from cwd for use in completion functions.
+// It also installs the registry cache so completion hits the same cache as
+// `flaxx check`. Cache setup failures are silent — completions must never
+// error a tab-press.
 func loadCompletionConfig() (string, config.Config, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -280,6 +285,17 @@ func loadCompletionConfig() (string, config.Config, error) {
 	if err != nil {
 		return "", config.Config{}, err
 	}
+
+	ttl := time.Hour
+	if cfg.Cache.TTL != "" {
+		if d, parseErr := time.ParseDuration(cfg.Cache.TTL); parseErr == nil {
+			ttl = d
+		}
+	}
+	if c, cacheErr := cache.New(ttl, cfg.Cache.Enabled); cacheErr == nil {
+		checker.SetCache(c)
+	}
+
 	return cwd, cfg, nil
 }
 
