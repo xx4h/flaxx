@@ -31,6 +31,7 @@ func resetFlags() {
 	helmURL = ""
 	helmChart = ""
 	helmVersion = ""
+	workloadKind = ""
 	updateHelmVersion = ""
 	updateHelm = nil
 	updateImage = ""
@@ -50,6 +51,10 @@ func resetFlags() {
 	fromAppForce = false
 	fromAppDryRun = false
 	fromAppDescription = ""
+	switchKind = ""
+	switchServiceName = ""
+	switchNamespace = ""
+	switchDryRun = false
 }
 
 // executeCommand runs the root command with the given args and returns stdout output.
@@ -284,6 +289,95 @@ resources:
 	}
 	if !strings.Contains(string(content), "# test file for myapp") {
 		t.Error("extra file has wrong app name — args may be swapped")
+	}
+}
+
+func TestGenerateWorkloadKindCore(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "clusters", "staging"), 0o755)
+	os.MkdirAll(filepath.Join(dir, "clusters", "staging-namespaces"), 0o755)
+
+	origDir, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(origDir)
+
+	_, err := executeCommand("generate", "staging", "webapp", "-t", "core", "--workload-kind", "statefulset")
+	if err != nil {
+		t.Fatalf("generate failed: %v", err)
+	}
+
+	workloadFile := filepath.Join(dir, "clusters", "staging-namespaces", "webapp", "webapp-statefulset.yaml")
+	content, err := os.ReadFile(workloadFile)
+	if err != nil {
+		t.Fatalf("workload file not created: %v", err)
+	}
+	if !strings.Contains(string(content), "kind: StatefulSet") {
+		t.Errorf("expected kind: StatefulSet, got:\n%s", content)
+	}
+
+	ks, err := os.ReadFile(filepath.Join(dir, "clusters", "staging-namespaces", "webapp", "kustomization.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(ks), "- webapp-statefulset.yaml") {
+		t.Errorf("namespace kustomization missing workload resource:\n%s", ks)
+	}
+}
+
+func TestGenerateWorkloadKindRejectedForHelm(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "clusters", "staging"), 0o755)
+	os.MkdirAll(filepath.Join(dir, "clusters", "staging-namespaces"), 0o755)
+
+	origDir, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(origDir)
+
+	_, err := executeCommand("generate", "staging", "webapp", "-t", "ext-helm", "--helm-url", "https://charts.example.com", "--workload-kind", "deployment")
+	if err == nil {
+		t.Fatal("expected error: --workload-kind with --type=ext-helm")
+	}
+	if !strings.Contains(err.Error(), "--workload-kind is only valid with --type=core") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestSwitchEndToEnd(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "clusters", "staging"), 0o755)
+	os.MkdirAll(filepath.Join(dir, "clusters", "staging-namespaces"), 0o755)
+
+	origDir, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(origDir)
+
+	if _, err := executeCommand("generate", "staging", "webapp", "-t", "core", "--workload-kind", "deployment"); err != nil {
+		t.Fatalf("generate failed: %v", err)
+	}
+
+	if _, err := executeCommand("switch", "staging", "webapp", "--kind", "daemonset"); err != nil {
+		t.Fatalf("switch failed: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, "clusters", "staging-namespaces", "webapp", "webapp-deployment.yaml")); !os.IsNotExist(err) {
+		t.Error("old deployment file should be removed")
+	}
+
+	dsFile := filepath.Join(dir, "clusters", "staging-namespaces", "webapp", "webapp-daemonset.yaml")
+	content, err := os.ReadFile(dsFile)
+	if err != nil {
+		t.Fatalf("daemonset file not present: %v", err)
+	}
+	if !strings.Contains(string(content), "kind: DaemonSet") {
+		t.Errorf("unexpected content:\n%s", content)
+	}
+	if strings.Contains(string(content), "replicas:") {
+		t.Errorf("DaemonSet should not have replicas:\n%s", content)
+	}
+
+	ks, _ := os.ReadFile(filepath.Join(dir, "clusters", "staging-namespaces", "webapp", "kustomization.yaml"))
+	if !strings.Contains(string(ks), "- webapp-daemonset.yaml") {
+		t.Errorf("kustomization not updated:\n%s", ks)
 	}
 }
 

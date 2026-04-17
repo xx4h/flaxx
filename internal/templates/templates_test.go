@@ -182,3 +182,95 @@ func TestRenderHelmFileOCI(t *testing.T) {
 		t.Error("should not have version when not set")
 	}
 }
+
+func TestRenderDeployment(t *testing.T) {
+	data := TemplateData{App: "myapp", Namespace: "myapp"}
+	result, err := RenderDeployment(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"apiVersion: apps/v1", "kind: Deployment", "name: myapp", "replicas: 1"} {
+		if !strings.Contains(result, want) {
+			t.Errorf("missing %q in:\n%s", want, result)
+		}
+	}
+	for _, absent := range []string{"serviceName:", "volumeClaimTemplates"} {
+		if strings.Contains(result, absent) {
+			t.Errorf("Deployment should not contain %q", absent)
+		}
+	}
+}
+
+func TestRenderStatefulSet(t *testing.T) {
+	data := TemplateData{App: "myapp", Namespace: "myapp"}
+	result, err := RenderStatefulSet(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"kind: StatefulSet", "replicas: 1", "serviceName: myapp", "volumeClaimTemplates"} {
+		if !strings.Contains(result, want) {
+			t.Errorf("missing %q in:\n%s", want, result)
+		}
+	}
+}
+
+func TestRenderDaemonSet(t *testing.T) {
+	data := TemplateData{App: "myapp", Namespace: "myapp"}
+	result, err := RenderDaemonSet(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(result, "kind: DaemonSet") {
+		t.Errorf("missing kind: DaemonSet in:\n%s", result)
+	}
+	if strings.Contains(result, "replicas:") {
+		t.Error("DaemonSet should not contain replicas")
+	}
+	if strings.Contains(result, "serviceName:") {
+		t.Error("DaemonSet should not contain serviceName")
+	}
+}
+
+func TestRenderWorkloadDispatcher(t *testing.T) {
+	cases := []struct {
+		in       string
+		wantKind string
+	}{
+		{"deployment", "kind: Deployment"},
+		{"Deployment", "kind: Deployment"},
+		{"STATEFULSET", "kind: StatefulSet"},
+		{"DaemonSet", "kind: DaemonSet"},
+	}
+	for _, tc := range cases {
+		got, err := RenderWorkload(tc.in, TemplateData{App: "x", Namespace: "x"})
+		if err != nil {
+			t.Fatalf("RenderWorkload(%q): %v", tc.in, err)
+		}
+		if !strings.Contains(got, tc.wantKind) {
+			t.Errorf("RenderWorkload(%q) missing %q", tc.in, tc.wantKind)
+		}
+	}
+
+	if _, err := RenderWorkload("job", TemplateData{}); err == nil {
+		t.Error("expected error for unsupported kind")
+	}
+}
+
+func TestNormalizeWorkloadKind(t *testing.T) {
+	cases := map[string]string{
+		"deployment":  "Deployment",
+		"Deployment":  "Deployment",
+		"DEPLOYMENT":  "Deployment",
+		"statefulset": "StatefulSet",
+		"StatefulSet": "StatefulSet",
+		"daemonset":   "DaemonSet",
+		"DaemonSet":   "DaemonSet",
+		"job":         "",
+		"":            "",
+	}
+	for in, want := range cases {
+		if got := NormalizeWorkloadKind(in); got != want {
+			t.Errorf("NormalizeWorkloadKind(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
