@@ -10,21 +10,23 @@ import (
 	"github.com/xx4h/flaxx/internal/config"
 	"github.com/xx4h/flaxx/internal/extras"
 	"github.com/xx4h/flaxx/internal/generator"
+	"github.com/xx4h/flaxx/internal/templates"
 )
 
 var (
-	deployType  string
-	namespace   string
-	extraNames  []string
-	setVars     []string
-	gitURL      string
-	gitBranch   string
-	gitPath     string
-	gitSecret   string
-	helmURL     string
-	helmChart   string
-	helmVersion string
-	dryRun      bool
+	deployType   string
+	namespace    string
+	extraNames   []string
+	setVars      []string
+	gitURL       string
+	gitBranch    string
+	gitPath      string
+	gitSecret    string
+	helmURL      string
+	helmChart    string
+	helmVersion  string
+	workloadKind string
+	dryRun       bool
 )
 
 var generateCmd = &cobra.Command{
@@ -48,12 +50,14 @@ func init() {
 	generateCmd.Flags().StringVar(&helmURL, "helm-url", "", "Helm repository URL (required for helm types)")
 	generateCmd.Flags().StringVar(&helmChart, "helm-chart", "", "Helm chart name (default: app name)")
 	generateCmd.Flags().StringVar(&helmVersion, "helm-version", "", "Helm chart version")
+	generateCmd.Flags().StringVar(&workloadKind, "workload-kind", "", "emit a workload manifest (deployment|statefulset|daemonset); only valid with --type=core")
 	generateCmd.Flags().BoolVar(&dryRun, "dry-run", false, "print output without writing files")
 
 	_ = generateCmd.MarkFlagRequired("type")
 
 	_ = generateCmd.RegisterFlagCompletionFunc("type", completeType)
 	_ = generateCmd.RegisterFlagCompletionFunc("extra", completeExtra)
+	_ = generateCmd.RegisterFlagCompletionFunc("workload-kind", completeWorkloadKind)
 
 	rootCmd.AddCommand(generateCmd)
 }
@@ -94,20 +98,21 @@ func runGenerate(_ *cobra.Command, args []string) error {
 	}
 
 	opts := generator.Options{
-		App:         app,
-		Cluster:     cluster,
-		Namespace:   namespace,
-		Type:        dt,
-		GitURL:      gitURL,
-		GitBranch:   gitBranch,
-		GitPath:     gitPath,
-		GitSecret:   gitSecret,
-		HelmURL:     helmURL,
-		HelmChart:   helmChart,
-		HelmVersion: helmVersion,
-		Extras:      extraNames,
-		Sets:        sets,
-		DryRun:      dryRun,
+		App:          app,
+		Cluster:      cluster,
+		Namespace:    namespace,
+		Type:         dt,
+		GitURL:       gitURL,
+		GitBranch:    gitBranch,
+		GitPath:      gitPath,
+		GitSecret:    gitSecret,
+		HelmURL:      helmURL,
+		HelmChart:    helmChart,
+		HelmVersion:  helmVersion,
+		WorkloadKind: workloadKind,
+		Extras:       extraNames,
+		Sets:         sets,
+		DryRun:       dryRun,
 	}
 
 	result, err := generator.Run(cfg, opts, cwd)
@@ -148,6 +153,14 @@ func validateTypeFlags(dt generator.DeployType) error {
 	if dt == generator.TypeExtOCI && !strings.HasPrefix(helmURL, "oci://") {
 		return fmt.Errorf("--helm-url must start with oci:// for type ext-oci")
 	}
+	if workloadKind != "" {
+		if dt != generator.TypeCore {
+			return fmt.Errorf("--workload-kind is only valid with --type=core")
+		}
+		if templates.NormalizeWorkloadKind(workloadKind) == "" {
+			return fmt.Errorf("invalid --workload-kind %q: want deployment|statefulset|daemonset", workloadKind)
+		}
+	}
 	return nil
 }
 
@@ -170,6 +183,14 @@ func completeType(_ *cobra.Command, _ []string, _ string) ([]string, cobra.Shell
 		"ext-git\tDual Kustomization with external GitRepository",
 		"ext-helm\tLocal namespace + external HelmRepository",
 		"ext-oci\tLocal namespace + OCI HelmRepository",
+	}, cobra.ShellCompDirectiveNoFileComp
+}
+
+func completeWorkloadKind(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+	return []string{
+		"deployment\tstateless workload",
+		"statefulset\tstateful workload with stable identity",
+		"daemonset\tone pod per node",
 	}, cobra.ShellCompDirectiveNoFileComp
 }
 

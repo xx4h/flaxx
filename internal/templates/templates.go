@@ -3,6 +3,7 @@ package templates
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"text/template"
 )
 
@@ -221,4 +222,112 @@ func RenderHelmFile(data TemplateData) (string, error) {
 		return "", err
 	}
 	return repo + release, nil
+}
+
+const DeploymentTmpl = `---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{.App}}
+  namespace: {{.Namespace}}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{.App}}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{.App}}
+    spec:
+      containers:
+      - name: {{.App}}
+        image: nginx:latest
+`
+
+const StatefulSetTmpl = `---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{.App}}
+  namespace: {{.Namespace}}
+spec:
+  replicas: 1
+  serviceName: {{.App}}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{.App}}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{.App}}
+    spec:
+      containers:
+      - name: {{.App}}
+        image: nginx:latest
+  volumeClaimTemplates: []
+`
+
+const DaemonSetTmpl = `---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{.App}}
+  namespace: {{.Namespace}}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{.App}}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{.App}}
+    spec:
+      containers:
+      - name: {{.App}}
+        image: nginx:latest
+`
+
+// RenderDeployment renders a minimal Deployment manifest.
+func RenderDeployment(data TemplateData) (string, error) {
+	return Render("deployment", DeploymentTmpl, data)
+}
+
+// RenderStatefulSet renders a minimal StatefulSet manifest.
+func RenderStatefulSet(data TemplateData) (string, error) {
+	return Render("statefulset", StatefulSetTmpl, data)
+}
+
+// RenderDaemonSet renders a minimal DaemonSet manifest.
+func RenderDaemonSet(data TemplateData) (string, error) {
+	return Render("daemonset", DaemonSetTmpl, data)
+}
+
+// RenderWorkload renders the workload manifest matching kind (case-insensitive).
+// Accepts "deployment", "statefulset", "daemonset".
+func RenderWorkload(kind string, data TemplateData) (string, error) {
+	switch NormalizeWorkloadKind(kind) {
+	case "Deployment":
+		return RenderDeployment(data)
+	case "StatefulSet":
+		return RenderStatefulSet(data)
+	case "DaemonSet":
+		return RenderDaemonSet(data)
+	default:
+		return "", fmt.Errorf("unknown workload kind %q (want deployment|statefulset|daemonset)", kind)
+	}
+}
+
+// NormalizeWorkloadKind canonicalizes user-supplied workload kind strings to
+// "Deployment" / "StatefulSet" / "DaemonSet", or returns "" if unrecognized.
+func NormalizeWorkloadKind(kind string) string {
+	switch strings.ToLower(kind) {
+	case "deployment":
+		return "Deployment"
+	case "statefulset":
+		return "StatefulSet"
+	case "daemonset":
+		return "DaemonSet"
+	}
+	return ""
 }

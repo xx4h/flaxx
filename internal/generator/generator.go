@@ -44,6 +44,11 @@ type Options struct {
 	HelmChart   string
 	HelmVersion string
 
+	// WorkloadKind, if set, emits a minimal Deployment/StatefulSet/DaemonSet
+	// manifest into the namespaces app dir. Only honored for Type == TypeCore.
+	// Accepts values normalized via templates.NormalizeWorkloadKind.
+	WorkloadKind string
+
 	// Extras
 	Extras []string
 	Sets   map[string]string
@@ -145,6 +150,11 @@ func Run(cfg config.Config, opts Options, repoRoot string) (*Result, error) {
 	extraFiles, extraErr := processExtras(cfg, opts, repoRoot, appClusterDir, appNamespacesDir, &result)
 	if extraErr != nil {
 		return nil, extraErr
+	}
+
+	// Emit a workload manifest for core-type apps when requested.
+	if workloadErr := renderWorkloadFile(opts, tmplData, appNamespacesDir, &extraFiles, &result); workloadErr != nil {
+		return nil, workloadErr
 	}
 
 	// Generate namespace files
@@ -309,6 +319,37 @@ func processExtras(cfg config.Config, opts Options, repoRoot, appClusterDir, app
 	}
 
 	return extraFiles, nil
+}
+
+// WorkloadFilename returns the conventional filename for a workload manifest
+// of the given canonical kind (Deployment/StatefulSet/DaemonSet). Returns ""
+// if the kind is not recognized.
+func WorkloadFilename(app, kind string) string {
+	canonical := templates.NormalizeWorkloadKind(kind)
+	if canonical == "" {
+		return ""
+	}
+	return app + "-" + strings.ToLower(canonical) + ".yaml"
+}
+
+func renderWorkloadFile(opts Options, tmplData templates.TemplateData, appNamespacesDir string, extraFiles *[]string, result *Result) error {
+	if opts.WorkloadKind == "" {
+		return nil
+	}
+	if opts.Type != TypeCore {
+		return fmt.Errorf("--workload-kind is only valid with --type=core")
+	}
+	canonical := templates.NormalizeWorkloadKind(opts.WorkloadKind)
+	if canonical == "" {
+		return fmt.Errorf("invalid workload kind %q (want deployment|statefulset|daemonset)", opts.WorkloadKind)
+	}
+	content, err := templates.RenderWorkload(canonical, tmplData)
+	if err != nil {
+		return err
+	}
+	fileName := WorkloadFilename(opts.App, canonical)
+	*extraFiles = append(*extraFiles, fileName)
+	return writeFile(filepath.Join(appNamespacesDir, fileName), content, opts.DryRun, result)
 }
 
 func renderNamespaceFiles(cfg config.Config, tmplData templates.TemplateData, extraFiles []string, appNamespacesDir string, dryRun bool, result *Result) error {
