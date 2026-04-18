@@ -159,6 +159,46 @@ func TestRenderHelmFile(t *testing.T) {
 	if strings.Contains(result, "type: oci") {
 		t.Error("should not have OCI type")
 	}
+
+	// Regression lock: when HelmValues is empty we must keep the existing
+	// `values: {}` placeholder so unrelated `generate` callers see
+	// byte-identical output.
+	if !strings.Contains(result, "values: {}") {
+		t.Errorf("expected `values: {}` for empty HelmValues, got:\n%s", result)
+	}
+	if strings.Contains(result, "values:\n") && !strings.Contains(result, "values: {}") {
+		t.Error("HelmValues empty should not emit a multi-line values block")
+	}
+}
+
+func TestRenderHelmFileWithValues(t *testing.T) {
+	data := TemplateData{
+		App:         "myapp",
+		Namespace:   "myapp",
+		HelmURL:     "https://charts.example.com",
+		HelmChart:   "myapp",
+		HelmVersion: "1.2.3",
+		HelmValues:  "    replicaCount: 3\n    image:\n      tag: v2",
+	}
+
+	result, err := RenderHelmFile(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if strings.Contains(result, "values: {}") {
+		t.Errorf("should not fall back to `values: {}` when HelmValues is non-empty, got:\n%s", result)
+	}
+	for _, want := range []string{
+		"  values:\n",
+		"    replicaCount: 3",
+		"    image:",
+		"      tag: v2",
+	} {
+		if !strings.Contains(result, want) {
+			t.Errorf("missing %q in:\n%s", want, result)
+		}
+	}
 }
 
 func TestRenderHelmFileOCI(t *testing.T) {

@@ -25,6 +25,10 @@ type TemplateData struct {
 	HelmChart   string
 	HelmVersion string
 	HelmOCI     bool
+	// HelmValues is a pre-rendered YAML fragment, already indented to sit
+	// under `spec.values:` in the HelmRelease (4 spaces). Empty string
+	// means "no user-supplied values" and the template emits `values: {}`.
+	HelmValues string
 }
 
 func Render(name, tmpl string, data TemplateData) (string, error) {
@@ -155,7 +159,12 @@ spec:
         name: {{.App}}
         namespace: {{.Namespace}}
   interval: 0h10m0s
+{{- if .HelmValues}}
+  values:
+{{.HelmValues}}
+{{- else}}
   values: {}
+{{- end}}
 `
 
 // KustomizationData holds data for the flux kustomization templates.

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"text/template"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/xx4h/flaxx/internal/config"
 	"github.com/xx4h/flaxx/internal/extras"
 	"github.com/xx4h/flaxx/internal/templates"
@@ -43,6 +45,11 @@ type Options struct {
 	HelmURL     string
 	HelmChart   string
 	HelmVersion string
+	// HelmValues carries the user-supplied overrides extracted from a Helm
+	// release (only meaningful for the importer today). They are rendered
+	// inline under `spec.values:` in the generated HelmRelease. Nil/empty
+	// preserves today's `values: {}` output for callers that don't set this.
+	HelmValues map[string]interface{}
 
 	// WorkloadKind, if set, emits a minimal Deployment/StatefulSet/DaemonSet
 	// manifest into the namespaces app dir. Only honored for Type == TypeCore.
@@ -52,6 +59,17 @@ type Options struct {
 	// Extras
 	Extras []string
 	Sets   map[string]string
+
+	// PreWrittenNamespaceFiles lists filenames already present in the app's
+	// namespaces directory (e.g. written by the importer before calling Run)
+	// that should be included in the in-namespace kustomization.yaml
+	// resources: list alongside extras and the workload manifest.
+	PreWrittenNamespaceFiles []string
+
+	// SkipExistsCheck disables the pre-flight that refuses to scaffold on top
+	// of an existing app directory. Callers that have already created or
+	// validated those directories (e.g. the importer) set this.
+	SkipExistsCheck bool
 
 	DryRun bool
 }
@@ -81,7 +99,7 @@ func Run(cfg config.Config, opts Options, repoRoot string) (*Result, error) {
 	appClusterDir := ResolveAppClusterDir(fullClusterDir, opts.App, cfg.Paths.ClusterSubdirs)
 	appNamespacesDir := filepath.Join(repoRoot, namespacesDir, opts.App)
 
-	if !opts.DryRun {
+	if !opts.DryRun && !opts.SkipExistsCheck {
 		if existsErr := checkNotExists(appNamespacesDir); existsErr != nil {
 			return nil, existsErr
 		}
@@ -114,6 +132,11 @@ func Run(cfg config.Config, opts Options, repoRoot string) (*Result, error) {
 		pruneStr = "true"
 	}
 
+	helmValues, err := renderHelmValues(opts.HelmValues)
+	if err != nil {
+		return nil, fmt.Errorf("rendering helm values: %w", err)
+	}
+
 	tmplData := templates.TemplateData{
 		App:         opts.App,
 		Cluster:     opts.Cluster,
@@ -130,6 +153,7 @@ func Run(cfg config.Config, opts Options, repoRoot string) (*Result, error) {
 		HelmChart:   opts.HelmChart,
 		HelmVersion: opts.HelmVersion,
 		HelmOCI:     opts.Type == TypeExtOCI,
+		HelmValues:  helmValues,
 	}
 
 	ksData := templates.KustomizationData{
@@ -156,6 +180,11 @@ func Run(cfg config.Config, opts Options, repoRoot string) (*Result, error) {
 	if workloadErr := renderWorkloadFile(opts, tmplData, appNamespacesDir, &extraFiles, &result); workloadErr != nil {
 		return nil, workloadErr
 	}
+
+	// Merge any pre-written namespace files (e.g. from importer) so they
+	// get referenced from the in-namespace kustomization.yaml alongside
+	// extras and any generated workload.
+	extraFiles = append(extraFiles, opts.PreWrittenNamespaceFiles...)
 
 	// Generate namespace files
 	if renderErr := renderNamespaceFiles(cfg, tmplData, extraFiles, appNamespacesDir, opts.DryRun, &result); renderErr != nil {
@@ -426,6 +455,11 @@ func checkNotExists(path string) error {
 	return nil
 }
 
+// CheckNotExists is the exported version for use by other packages.
+func CheckNotExists(path string) error {
+	return checkNotExists(path)
+}
+
 func resolvePath(pattern string, opts Options) (string, error) {
 	return resolveTemplate(pattern, opts)
 }
@@ -477,6 +511,31 @@ func resolveTemplate(pattern string, opts Options) (string, error) {
 		return "", err
 	}
 	return buf.String(), nil
+}
+
+// renderHelmValues turns a user-supplied Helm values map into a YAML fragment
+// already indented by four spaces, so it slots under `spec.values:` in the
+// HelmRelease template. Empty/nil input returns "" so the template's else
+// branch emits `values: {}` and existing callers see byte-identical output.
+func renderHelmValues(values map[string]interface{}) (string, error) {
+	if len(values) == 0 {
+		return "", nil
+	}
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(values); err != nil {
+		return "", err
+	}
+	if err := enc.Close(); err != nil {
+		return "", err
+	}
+	raw := strings.TrimRight(buf.String(), "\n")
+	lines := strings.Split(raw, "\n")
+	for i, l := range lines {
+		lines[i] = "    " + l
+	}
+	return strings.Join(lines, "\n"), nil
 }
 
 func deriveGitName(url string) string {
