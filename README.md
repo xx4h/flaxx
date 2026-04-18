@@ -23,6 +23,8 @@
 
 Scaffolding and maintenance tool for FluxCD GitOps repositories. Generates the boilerplate YAML files needed to deploy a new app — namespace, Kustomization, HelmRelease, GitRepository, and more — and helps maintain them by checking for newer Helm chart and container image versions.
 
+> Full documentation and an end-to-end walkthrough live in [`docs/`](./docs/README.md).
+
 ## Why flaxx?
 
 Adding a new app to a Flux repository means creating the same set of files every time: a namespace, a Kustomize resource list, a Flux Kustomization, maybe a HelmRepository and HelmRelease — all wired together with the right paths and naming. It's tedious, error-prone, and the kind of thing you get wrong just often enough to waste time debugging a typo in a sourceRef.
