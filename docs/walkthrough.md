@@ -15,6 +15,7 @@ Rough outline:
 9. [Apply an update](#8-apply-an-update)
 10. [Inspect the finished repository](#9-inspect-the-finished-repository)
 11. [Multi-cluster notes](#10-multi-cluster-notes)
+12. [Adopting an existing app](#11-adopting-an-existing-app)
 
 ## Prerequisites
 
@@ -505,6 +506,22 @@ flaxx check prod --all
 ```
 
 Directory templates (`clusters/{{.Cluster}}`, `clusters/{{.Cluster}}-namespaces`) keep each cluster's files isolated. Edit [`.flaxx.yaml`](./configuration.md) to change the templates if your repository uses a different convention (e.g. the Flux-official `clusters/<cluster>/apps/` + `apps/<app>/` layout).
+
+## 11. Adopting an existing app
+
+Existing clusters often already run apps that were installed out-of-band — `helm install` from a prior workflow, `kubectl apply` for a one-off, or resources left over from an earlier tool. `flaxx import` reads the live state and writes a matching flaxx-shaped app folder so those apps can join the GitOps loop alongside everything else.
+
+```bash
+# Helm-installed app (detected automatically):
+flaxx import home grafana --namespace monitoring
+
+# Raw manifests — everything in the namespace:
+flaxx import home demo-app
+```
+
+For the Helm case `import` produces a `HelmRelease` + `HelmRepository`, identical to what `generate --type ext-helm` would have scaffolded. For raw apps it pulls every user-facing namespaced resource, sanitizes runtime-only fields (`status`, `managedFields`, cluster-defaulted networking, …), and wraps the result in a core-type Flux Kustomization.
+
+Secrets are skipped by default; re-run with `--include-secrets` when you're ready to move them into an encrypted store. See [commands/import.md](./commands/import.md) for the full list of flags, filters, and sanitization rules.
 
 ## Cleanup
 

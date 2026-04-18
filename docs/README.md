@@ -20,6 +20,7 @@ If you are brand new to flaxx, read the [walkthrough](./walkthrough.md) first �
 Per-command pages, one per subcommand — purpose, flags, examples, gotchas.
 
 - [`flaxx generate`](./commands/generate.md) — scaffold a new Flux app
+- [`flaxx import`](./commands/import.md) — adopt an app already running in a cluster
 - [`flaxx add`](./commands/add.md) — layer extras onto an existing app
 - [`flaxx switch`](./commands/switch.md) — migrate a workload between Deployment / StatefulSet / DaemonSet
 - [`flaxx update`](./commands/update.md) — bump a Helm chart version or container image
