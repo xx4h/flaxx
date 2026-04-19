@@ -99,6 +99,85 @@ func TestRunCoreHelmType(t *testing.T) {
 	}
 }
 
+func TestRunHelmWithValues(t *testing.T) {
+	dir := t.TempDir()
+
+	os.MkdirAll(filepath.Join(dir, "clusters", "k8s"), 0o755)
+	os.MkdirAll(filepath.Join(dir, "clusters", "k8s-namespaces"), 0o755)
+
+	cfg := config.DefaultConfig()
+	cfg.Paths.ClusterSubdirs = true
+	opts := Options{
+		App:         "myapp",
+		Cluster:     "k8s",
+		Type:        TypeExtHelm,
+		HelmURL:     "https://charts.example.com",
+		HelmChart:   "myapp",
+		HelmVersion: "1.2.3",
+		HelmValues: map[string]interface{}{
+			"replicaCount": 3,
+			"image": map[string]interface{}{
+				"tag": "v2",
+			},
+		},
+	}
+
+	if _, err := Run(cfg, opts, dir); err != nil {
+		t.Fatal(err)
+	}
+
+	helmFile := filepath.Join(dir, "clusters", "k8s", "myapp", "myapp-helm.yml")
+	content, err := os.ReadFile(helmFile)
+	if err != nil {
+		t.Fatalf("helm file not created: %v", err)
+	}
+	got := string(content)
+
+	if strings.Contains(got, "values: {}") {
+		t.Errorf("should not emit `values: {}` when HelmValues is set, got:\n%s", got)
+	}
+	for _, want := range []string{
+		"  values:\n",
+		"    replicaCount: 3",
+		"    image:",
+		"      tag: v2",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+}
+
+func TestRunHelmOCI(t *testing.T) {
+	dir := t.TempDir()
+
+	os.MkdirAll(filepath.Join(dir, "clusters", "k8s"), 0o755)
+	os.MkdirAll(filepath.Join(dir, "clusters", "k8s-namespaces"), 0o755)
+
+	cfg := config.DefaultConfig()
+	cfg.Paths.ClusterSubdirs = true
+	opts := Options{
+		App:       "myapp",
+		Cluster:   "k8s",
+		Type:      TypeExtOCI,
+		HelmURL:   "oci://ghcr.io/example/charts",
+		HelmChart: "myapp",
+	}
+
+	if _, err := Run(cfg, opts, dir); err != nil {
+		t.Fatal(err)
+	}
+
+	helmFile := filepath.Join(dir, "clusters", "k8s", "myapp", "myapp-helm.yml")
+	content, err := os.ReadFile(helmFile)
+	if err != nil {
+		t.Fatalf("helm file not created: %v", err)
+	}
+	if !strings.Contains(string(content), "type: oci") {
+		t.Errorf("OCI HelmRepository should have `type: oci`, got:\n%s", content)
+	}
+}
+
 func TestRunExtGitType(t *testing.T) {
 	dir := t.TempDir()
 
