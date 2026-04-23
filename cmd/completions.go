@@ -165,6 +165,88 @@ func completeHelmVersions(cmd *cobra.Command, args []string, toComplete string) 
 	return filtered, cobra.ShellCompDirectiveNoFileComp
 }
 
+// completeHelmCharts provides smart completion for the --helm flag:
+//   - Empty input or partial chart name: offers "chart:" prefixes for each
+//     HelmRelease in the app's cluster directory.
+//   - After "chart:": queries the repository for available versions and offers
+//     "chart:version" entries.
+func completeHelmCharts(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) < 2 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	cluster := args[0]
+	app := args[1]
+
+	cwd, cfg, err := loadCompletionConfig()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+
+	ns, _ := cmd.Flags().GetString("namespace") //nolint:errcheck // flag is always registered
+	if ns == "" {
+		ns = app
+	}
+
+	genOpts := generator.Options{App: app, Cluster: cluster, Namespace: ns}
+	clusterDir, err := generator.ResolvePath(cfg.Paths.ClusterDir, genOpts)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+
+	appClusterDir := generator.ResolveAppClusterDir(filepath.Join(cwd, clusterDir), app, cfg.Paths.ClusterSubdirs)
+	helmInfos, scanErr := checker.ScanAllHelm(appClusterDir, generator.AppFilter(app, cfg.Paths.ClusterSubdirs))
+	if scanErr != nil || len(helmInfos) == 0 {
+		return nil, cobra.ShellCompDirectiveError
+	}
+
+	// Phase 1: no ":" yet — offer "chart:" prefixes, one per HelmRelease.
+	idx := strings.LastIndex(toComplete, ":")
+	if idx < 0 {
+		var completions []string
+		for _, info := range helmInfos {
+			prefix := info.ChartName + ":"
+			if strings.HasPrefix(prefix, toComplete) {
+				completions = append(completions, prefix)
+			}
+		}
+		return completions, cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveNoSpace
+	}
+
+	// Phase 2: "chart:" present — find matching HelmInfo and fetch versions.
+	chart := toComplete[:idx]
+	var target *checker.HelmInfo
+	for i := range helmInfos {
+		if helmInfos[i].ChartName == chart {
+			target = &helmInfos[i]
+			break
+		}
+	}
+	if target == nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	var tagged []checker.TaggedVersion
+	var fetchErr error
+	if target.RepoType == "oci" {
+		tagged, fetchErr = checker.FetchOCIVersions(target.RepoURL, target.ChartName)
+	} else {
+		tagged, fetchErr = checker.FetchHelmVersions(target.RepoURL, target.ChartName)
+	}
+	if fetchErr != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+
+	var completions []string
+	for _, tv := range tagged {
+		entry := chart + ":" + tv.Tag
+		if strings.HasPrefix(entry, toComplete) {
+			completions = append(completions, entry)
+		}
+	}
+	return completions, cobra.ShellCompDirectiveNoFileComp
+}
+
 // completeImages provides smart completion for the --image flag:
 //   - Empty input: offers "name=" prefixes for container selection
 //   - After "name=" or "name=image:": queries the registry for available tags
