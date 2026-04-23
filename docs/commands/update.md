@@ -22,7 +22,7 @@ At least one of `--helm`, `--helm-version`, or `--image` must be provided.
 
 `--helm` and `--helm-version` are mutually exclusive. Global: `--config <path>`.
 
-Shell completions for `--helm-version` and `--image` query upstream registries for candidate values, so you can press `<TAB>` after the flag and get a list of actual versions / tags to pick from.
+Shell completions for `--helm`, `--helm-version`, and `--image` query upstream registries for candidate values, so you can press `<TAB>` after the flag and get a list of actual versions / tags to pick from. For `--helm`, a first `<TAB>` offers the `chart:` prefixes present in the app; a second `<TAB>` after the colon offers that chart's available versions.
 
 ## Examples
 

@@ -55,6 +55,7 @@ func init() {
 
 	updateCmd.MarkFlagsMutuallyExclusive("helm", "helm-version")
 
+	_ = updateCmd.RegisterFlagCompletionFunc("helm", completeHelmCharts)
 	_ = updateCmd.RegisterFlagCompletionFunc("helm-version", completeHelmVersions)
 	_ = updateCmd.RegisterFlagCompletionFunc("image", completeImages)
 
