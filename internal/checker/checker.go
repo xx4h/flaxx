@@ -20,6 +20,20 @@ type HelmInfo struct {
 	RepoURL        string
 	RepoType       string // "" for standard, "oci" for OCI
 	Namespace      string
+	// Values is the inline spec.values block of the HelmRelease, decoded
+	// into a generic map. nil when no inline values are set.
+	Values map[string]any
+	// ValuesFrom carries spec.valuesFrom entries verbatim so callers can
+	// resolve referenced ConfigMaps/Secrets themselves.
+	ValuesFrom []ValuesFromRef
+}
+
+// ValuesFromRef mirrors a Flux HelmRelease spec.valuesFrom entry.
+type ValuesFromRef struct {
+	Kind      string // "ConfigMap" or "Secret"
+	Name      string
+	ValuesKey string // optional key inside the resource (defaults to "values.yaml")
+	Optional  bool
 }
 
 // CheckResult holds the result of a version check for a single app.
@@ -36,6 +50,8 @@ type helmRelease struct {
 	CurrentVersion string
 	Namespace      string
 	SourceRefName  string
+	Values         map[string]any
+	ValuesFrom     []ValuesFromRef
 }
 
 // helmRepository holds parsed HelmRepository data.
@@ -88,6 +104,8 @@ func ScanAllHelm(clusterDir string, appFilter string) ([]HelmInfo, error) {
 					CurrentVersion: strings.Trim(res.Spec.Chart.Spec.Version, "'\""),
 					Namespace:      res.Metadata.Namespace,
 					SourceRefName:  res.Spec.Chart.Spec.SourceRef.Name,
+					Values:         res.Spec.Values,
+					ValuesFrom:     convertValuesFrom(res.Spec.ValuesFrom),
 				})
 			case "HelmRepository":
 				repos[res.Metadata.Name] = helmRepository{
@@ -111,6 +129,8 @@ func ScanAllHelm(clusterDir string, appFilter string) ([]HelmInfo, error) {
 			CurrentVersion: rel.CurrentVersion,
 			Namespace:      rel.Namespace,
 			RepoName:       rel.SourceRefName,
+			Values:         rel.Values,
+			ValuesFrom:     rel.ValuesFrom,
 		}
 		// Match to repository by sourceRef name
 		if repo, ok := repos[rel.SourceRefName]; ok {
@@ -142,10 +162,30 @@ type resource struct {
 				} `yaml:"sourceRef"`
 			} `yaml:"spec"`
 		} `yaml:"chart"`
+		Values     map[string]any  `yaml:"values"`
+		ValuesFrom []rawValuesFrom `yaml:"valuesFrom"`
 		// HelmRepository fields
 		URL  string `yaml:"url"`
 		Type string `yaml:"type"`
 	} `yaml:"spec"`
+}
+
+type rawValuesFrom struct {
+	Kind      string `yaml:"kind"`
+	Name      string `yaml:"name"`
+	ValuesKey string `yaml:"valuesKey"`
+	Optional  bool   `yaml:"optional"`
+}
+
+func convertValuesFrom(raw []rawValuesFrom) []ValuesFromRef {
+	if len(raw) == 0 {
+		return nil
+	}
+	out := make([]ValuesFromRef, 0, len(raw))
+	for _, r := range raw {
+		out = append(out, ValuesFromRef(r))
+	}
+	return out
 }
 
 func parseYAMLDocuments(data []byte) ([]resource, error) {

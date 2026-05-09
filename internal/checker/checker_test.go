@@ -267,6 +267,73 @@ spec:
 	}
 }
 
+func TestScanAllHelm_Values(t *testing.T) {
+	dir := t.TempDir()
+
+	helmFile := `---
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: HelmRepository
+metadata:
+  name: myapp
+spec:
+  url: https://charts.example.com
+---
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: myapp
+  namespace: myapp
+spec:
+  chart:
+    spec:
+      chart: myapp
+      version: '1.0.0'
+      sourceRef:
+        kind: HelmRepository
+        name: myapp
+  valuesFrom:
+  - kind: ConfigMap
+    name: extra-values
+    valuesKey: app.yaml
+    optional: true
+  values:
+    replicas: 3
+    image:
+      tag: v2
+`
+	if err := os.WriteFile(filepath.Join(dir, "myapp-helm.yml"), []byte(helmFile), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	infos, err := ScanAllHelm(dir, "")
+	if err != nil {
+		t.Fatalf("ScanAllHelm failed: %v", err)
+	}
+	if len(infos) != 1 {
+		t.Fatalf("got %d infos, want 1", len(infos))
+	}
+	info := infos[0]
+
+	if info.Values["replicas"] != 3 {
+		t.Errorf("Values.replicas = %#v, want 3", info.Values["replicas"])
+	}
+	img, ok := info.Values["image"].(map[string]any)
+	if !ok {
+		t.Fatalf("Values.image type %T, want map", info.Values["image"])
+	}
+	if img["tag"] != "v2" {
+		t.Errorf("Values.image.tag = %#v, want v2", img["tag"])
+	}
+
+	if len(info.ValuesFrom) != 1 {
+		t.Fatalf("ValuesFrom len = %d, want 1", len(info.ValuesFrom))
+	}
+	vf := info.ValuesFrom[0]
+	if vf.Kind != "ConfigMap" || vf.Name != "extra-values" || vf.ValuesKey != "app.yaml" || !vf.Optional {
+		t.Errorf("ValuesFrom[0] = %+v", vf)
+	}
+}
+
 func TestScanAllHelm_NoVersionPinned(t *testing.T) {
 	dir := t.TempDir()
 

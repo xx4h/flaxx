@@ -167,6 +167,27 @@ spec:
   values: {}
 ```
 
+Before committing, render what Flux is about to install — `flaxx show` pulls the chart and templates it client-side, using the version and values declared in the HelmRelease above:
+
+```bash
+flaxx show home podinfo | head -30
+```
+
+```text
+---
+# Source: podinfo/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: podinfo
+  labels:
+    helm.sh/chart: podinfo-6.5.4
+    app.kubernetes.io/name: podinfo
+…
+```
+
+Useful when you want to verify a chart's defaults, preview the effect of a `--set` override before committing it, or diff against the live cluster. See [commands/show.md](./commands/show.md) for the full flag list.
+
 Commit and push:
 
 ```bash
