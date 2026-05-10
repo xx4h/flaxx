@@ -21,7 +21,7 @@
 
 <!-- markdownlint-enable no-empty-links -->
 
-Scaffolding and maintenance tool for FluxCD GitOps repositories. Generates the boilerplate YAML files needed to deploy a new app — namespace, Kustomization, HelmRelease, GitRepository, and more — and helps maintain them by checking for newer Helm chart and container image versions.
+Scaffolding and maintenance tool for FluxCD GitOps repositories. Generates the boilerplate YAML files needed to deploy a new app — namespace, Kustomization, HelmRelease, GitRepository, and more — helps maintain them by checking for newer Helm chart and container image versions, and renders what Flux will install so you can preview and diff before committing.
 
 > Full documentation and an end-to-end walkthrough live in [`docs/`](./docs/README.md).
 
@@ -29,7 +29,7 @@ Scaffolding and maintenance tool for FluxCD GitOps repositories. Generates the b
 
 Adding a new app to a Flux repository means creating the same set of files every time: a namespace, a Kustomize resource list, a Flux Kustomization, maybe a HelmRepository and HelmRelease — all wired together with the right paths and naming. It's tedious, error-prone, and the kind of thing you get wrong just often enough to waste time debugging a typo in a sourceRef.
 
-flaxx handles the scaffolding so you don't have to. One command generates all the files, adds them to the parent kustomization, and follows the conventions your repository already uses. It also helps with ongoing maintenance: checking upstream Helm repos and container registries for newer versions, and updating them in place.
+flaxx handles the scaffolding so you don't have to. One command generates the files, wires them into the parent kustomization, and follows your repository's conventions. It also helps with maintenance: checking Helm repositories and container registries for newer versions, applying updates in place, and rendering what Flux will install so you can preview or diff before committing.
 
 ## Getting Started
 
@@ -140,6 +140,9 @@ flaxx check production --all
 
 # Update a Helm chart version
 flaxx update production myapp --helm-version 2.0.0
+
+# Render the manifests a HelmRelease will produce (preview before committing)
+flaxx show production myapp
 
 # Inspect the repository structure
 flaxx inspect
@@ -252,6 +255,26 @@ flaxx update production myapp --image sidecar=registry/sidecar:v2.0
 
 Shell completions for `--helm-version` and `--image` query upstream registries for available versions.
 
+## Rendering HelmRelease output
+
+`flaxx show` runs the same template engine `helm template` uses, but driven by the HelmRelease in your repository — pulling the pinned chart version, resolving `spec.values` and `spec.valuesFrom` (sibling ConfigMaps/Secrets), and printing the rendered Kubernetes manifests:
+
+```bash
+# Render the manifests for an app
+flaxx show production myapp
+
+# Layer a CLI override on top of the HelmRelease values
+flaxx show production myapp -f override.yaml --set image.tag=v2
+
+# Pick one HelmRelease when an app declares several
+flaxx show production monitoring --helm grafana
+
+# Inspect just the merged values that would be passed to the chart
+flaxx show production myapp --values-only
+```
+
+Useful for previewing a chart's defaults, sanity-checking what a value override will do before committing it, or diffing the desired manifests against what's running. See [`docs/commands/show.md`](./docs/commands/show.md) for every flag.
+
 ## Custom Templates (Extras)
 
 Extras let you define reusable template sets for things like Vault Secret Operator, cert-manager, or any other recurring pattern. They live in your flux repository under the configured `templates_dir`.
@@ -322,6 +345,7 @@ Commands:
   add <cluster> <app>         Add extras to an existing app
   update <cluster> <app>      Update Helm version or container image
   check <cluster> [<app>]     Check for newer versions (use --all for all apps)
+  show <cluster> <app>        Render the manifests a HelmRelease would produce
   inspect                     Analyze the repository structure
   config show                 Preview detected configuration
   config init                 Generate .flaxx.yaml from detected structure
