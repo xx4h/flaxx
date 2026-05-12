@@ -201,8 +201,13 @@ func Run(cfg config.Config, opts Options, repoRoot string) (*Result, error) {
 		return nil, renderErr
 	}
 
-	// Auto-update parent kustomization.yaml in the cluster directory
-	if !opts.DryRun {
+	// In flat layout, auto-update the cluster directory's kustomization.yaml so
+	// kustomize can find each app's files. In subdirs layout we intentionally
+	// skip this: Flux relies on the kustomize-controller's recursive
+	// auto-discovery over the cluster path, and the moment any kustomization.yaml
+	// exists there, kustomize stops discovering and uses only what's listed —
+	// which would silently drop every other app from the desired state.
+	if !opts.DryRun && !cfg.Paths.ClusterSubdirs {
 		var clusterFiles []string
 		clusterFiles = append(clusterFiles, clusterResourcePath(kustomizationName, opts.App, cfg.Paths.ClusterSubdirs))
 		switch opts.Type {

@@ -62,6 +62,44 @@ func TestRunCoreType(t *testing.T) {
 	}
 }
 
+func TestRunSubdirsLeavesClusterKustomizationAlone(t *testing.T) {
+	// Regression: with cluster_subdirs: true, Flux's kustomize-controller relies
+	// on recursive auto-discovery at the cluster path. Emitting a
+	// kustomization.yaml there causes kustomize to stop auto-discovering and
+	// silently drops every other app from the desired state. flaxx must NOT
+	// write that file in subdirs mode.
+	dir := t.TempDir()
+
+	clusterDir := filepath.Join(dir, "clusters", "k3s")
+	os.MkdirAll(clusterDir, 0o755)
+	os.MkdirAll(filepath.Join(dir, "clusters", "k3s-namespaces"), 0o755)
+
+	cfg := config.DefaultConfig()
+	cfg.Paths.ClusterSubdirs = true
+
+	for _, tc := range []struct {
+		name string
+		opts Options
+	}{
+		{"core", Options{App: "appcore", Cluster: "k3s", Type: TypeCore}},
+		{"core-helm", Options{App: "apphelm", Cluster: "k3s", Type: TypeCoreHelm, HelmURL: "https://charts.example.com"}},
+		{"ext-helm", Options{App: "appext", Cluster: "k3s", Type: TypeExtHelm, HelmURL: "https://charts.example.com", HelmChart: "appext", HelmVersion: "1.0.0"}},
+		{"ext-oci", Options{App: "appoci", Cluster: "k3s", Type: TypeExtOCI, HelmURL: "oci://ghcr.io/example/charts", HelmChart: "appoci"}},
+		{"ext-git", Options{App: "appgit", Cluster: "k3s", Type: TypeExtGit, GitURL: "https://git.example.com/org/appgit.git", GitBranch: "main", GitPath: "./deploy", GitSecret: "git-secret"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := Run(cfg, tc.opts, dir); err != nil {
+				t.Fatal(err)
+			}
+			topKs := filepath.Join(clusterDir, "kustomization.yaml")
+			if _, err := os.Stat(topKs); err == nil {
+				data, _ := os.ReadFile(topKs)
+				t.Fatalf("subdirs layout must not create %s — would break Flux auto-discovery. Got:\n%s", topKs, string(data))
+			}
+		})
+	}
+}
+
 func TestRunCoreHelmType(t *testing.T) {
 	dir := t.TempDir()
 
