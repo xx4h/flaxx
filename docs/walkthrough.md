@@ -167,10 +167,10 @@ spec:
   values: {}
 ```
 
-Before committing, render what Flux is about to install — `flaxx show` pulls the chart and templates it client-side, using the version and values declared in the HelmRelease above:
+Before committing, render what Flux is about to install — `flaxx render` pulls the chart and templates it client-side, using the version and values declared in the HelmRelease above:
 
 ```bash
-flaxx show home podinfo | head -30
+flaxx render home podinfo | head -30
 ```
 
 ```text
@@ -186,7 +186,7 @@ metadata:
 …
 ```
 
-Useful when you want to verify a chart's defaults, preview the effect of a `--set` override before committing it, or diff against the live cluster. See [commands/show.md](./commands/show.md) for the full flag list.
+Useful when you want to verify a chart's defaults, preview the effect of a `--set` override before committing it, or diff against the live cluster. See [commands/render.md](./commands/render.md) for the full flag list.
 
 Commit and push:
 

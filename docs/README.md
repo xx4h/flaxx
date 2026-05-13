@@ -25,7 +25,7 @@ Per-command pages, one per subcommand — purpose, flags, examples, gotchas.
 - [`flaxx switch`](./commands/switch.md) — migrate a workload between Deployment / StatefulSet / DaemonSet
 - [`flaxx update`](./commands/update.md) — bump a Helm chart version or container image
 - [`flaxx check`](./commands/check.md) — query upstreams for newer versions
-- [`flaxx show`](./commands/show.md) — render the manifests a HelmRelease would produce
+- [`flaxx render`](./commands/render.md) — render the manifests a HelmRelease would produce
 - [`flaxx inspect`](./commands/inspect.md) — describe what flaxx sees in the current repository
 - [`flaxx config`](./commands/config.md) — show or initialize `.flaxx.yaml`
 - [`flaxx template`](./commands/template.md) — list / initialize / extract extras

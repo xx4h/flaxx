@@ -1,14 +1,14 @@
-# `flaxx show`
+# `flaxx render`
 
-Render the Kubernetes manifests an app's HelmRelease would produce. Pulls the pinned chart, layers in the values declared in your repository (and any CLI overrides), and prints the rendered YAML — equivalent to `helm template`, but driven by the Flux files instead of an ad-hoc `helm install` invocation. Read-only — `show` never mutates files and never talks to the cluster.
+Render the Kubernetes manifests an app's HelmRelease would produce. Pulls the pinned chart, layers in the values declared in your repository (and any CLI overrides), and prints the rendered YAML — equivalent to `helm template`, but driven by the Flux files instead of an ad-hoc `helm install` invocation. Read-only — `render` never mutates files and never talks to the cluster.
 
 ## Synopsis
 
 ```text
-flaxx show <cluster> <app> [flags]
+flaxx render <cluster> <app> [flags]
 ```
 
-`<cluster>` and `<app>` are both required. The app must have at least one `HelmRelease` in its cluster directory; raw-manifest apps (`-t core` without a chart) cannot be rendered with `show`.
+`<cluster>` and `<app>` are both required. The app must have at least one `HelmRelease` in its cluster directory; raw-manifest apps (`-t core` without a chart) cannot be rendered with `render`.
 
 ## Flags
 
@@ -29,7 +29,7 @@ Global: `--config <path>`.
 
 ## What gets rendered
 
-`show` discovers the HelmRelease(s) for the app the same way `check` and `inspect` do, then for each one:
+`render` discovers the HelmRelease(s) for the app the same way `check` and `inspect` do, then for each one:
 
 1. Reads `spec.chart.spec.chart`, `spec.chart.spec.version`, and `spec.chart.spec.sourceRef` from the HelmRelease.
 2. Resolves the matching HelmRepository and pulls the chart (HTTPS or OCI) into Helm's local cache (`$XDG_CACHE_HOME/helm/repository/`).
@@ -46,7 +46,7 @@ If the app has multiple HelmReleases and `--helm` isn't passed, every release is
 
 ### valuesFrom resolution
 
-Flux normally fetches the ConfigMap or Secret named in `spec.valuesFrom` from the cluster at reconcile time. `show` runs offline, so it can't do that — instead it scans the app's namespaces directory for a matching resource on disk:
+Flux normally fetches the ConfigMap or Secret named in `spec.valuesFrom` from the cluster at reconcile time. `render` runs offline, so it can't do that — instead it scans the app's namespaces directory for a matching resource on disk:
 
 - `kind` and `metadata.name` must match.
 - The default key is `values.yaml`; pass `valuesKey:` in the HelmRelease to use another.
@@ -54,14 +54,14 @@ Flux normally fetches the ConfigMap or Secret named in `spec.valuesFrom` from th
 - `optional: true` entries that aren't found are skipped with a warning on stderr.
 - Required entries that aren't found are an error.
 
-This is intentionally pragmatic: if the resource lives under your app's namespace directory (the typical pattern), `show` finds it. If the values come from a sealed Secret or a runtime-rendered ConfigMap, you'll either need to materialize a plaintext copy alongside or override with `-f`/`--set`.
+This is intentionally pragmatic: if the resource lives under your app's namespace directory (the typical pattern), `render` finds it. If the values come from a sealed Secret or a runtime-rendered ConfigMap, you'll either need to materialize a plaintext copy alongside or override with `-f`/`--set`.
 
 ## Examples
 
 ### Preview a HelmRelease
 
 ```bash
-flaxx show production myapp
+flaxx render production myapp
 ```
 
 ### Inspect just the merged values
@@ -69,7 +69,7 @@ flaxx show production myapp
 When you want to verify _what_ gets passed to the chart without wading through a multi-thousand-line manifest:
 
 ```bash
-flaxx show production myapp --values-only
+flaxx render production myapp --values-only
 ```
 
 ```yaml
@@ -86,7 +86,7 @@ ingress:
 ### Try out a CLI override before committing it
 
 ```bash
-flaxx show production myapp --set replicaCount=5 -f local-overrides.yaml
+flaxx render production myapp --set replicaCount=5 -f local-overrides.yaml
 ```
 
 The override is applied on top of the values declared in the HelmRelease, mirroring how a future `--set` in your repository would land. The repository on disk is unchanged.
@@ -94,17 +94,17 @@ The override is applied on top of the values declared in the HelmRelease, mirror
 ### Pick one HelmRelease in a multi-release app
 
 ```bash
-flaxx show production monitoring --helm grafana
+flaxx render production monitoring --helm grafana
 ```
 
 Without `--helm`, both `grafana` and `loki` would be rendered back-to-back.
 
 ### Diff against the live cluster
 
-`show` produces stable output, so a quick way to spot drift:
+`render` produces stable output, so a quick way to spot drift:
 
 ```bash
-flaxx show production myapp > /tmp/desired.yaml
+flaxx render production myapp > /tmp/desired.yaml
 kubectl get -n myapp -o yaml deploy,svc,ingress > /tmp/live.yaml
 diff <(yq -y . /tmp/desired.yaml) <(yq -y . /tmp/live.yaml)
 ```
@@ -116,7 +116,7 @@ diff <(yq -y . /tmp/desired.yaml) <(yq -y . /tmp/live.yaml)
 Some charts gate templates on the Kubernetes minor version. To preview what the chart would do on an older cluster:
 
 ```bash
-flaxx show production cert-manager --kube-version v1.27.0
+flaxx render production cert-manager --kube-version v1.27.0
 ```
 
 ### Tell the chart that a CRD is installed
@@ -124,17 +124,17 @@ flaxx show production cert-manager --kube-version v1.27.0
 Charts that use `.Capabilities.APIVersions.Has` to decide whether to emit a `ServiceMonitor` / `PrometheusRule` / etc. won't see your real cluster's APIs in client-only mode. Add them explicitly:
 
 ```bash
-flaxx show production myapp \
+flaxx render production myapp \
   --api-versions monitoring.coreos.com/v1 \
   --api-versions cert-manager.io/v1
 ```
 
 ## Caveats
 
-- **No cluster contact.** Hooks (`helm.sh/hook`) are disabled. Templates that reference `lookup` of cluster state will get the empty-result behavior Helm uses in client-only mode. If a chart genuinely requires the cluster to render correctly, `show` will be misleading — but the same is true of `helm template`.
-- **Values precedence matches `helm`, not Flux's `defaults` / `overrides` knobs.** `show` does not implement the `valuesKey: <key>` + `optional` + `targetPath: <jsonpath>` combination from Flux's HelmRelease spec — `targetPath` (which writes a single value into a deep path) is ignored. The other fields are honored.
-- **Chart caching is shared with the user's Helm CLI.** `show` writes into `$XDG_CACHE_HOME/helm/repository/` (or `~/.cache/helm/repository/`). A `helm repo update` you ran earlier helps populate that cache; a stale cache can hide a yanked version.
-- **OCI registries with private auth.** `show` reuses the credentials in `$HELM_REGISTRY_CONFIG` (default `~/.config/helm/registry/config.json`). If you `helm registry login` first, `show` will pick it up. There is no flag for inline credentials.
+- **No cluster contact.** Hooks (`helm.sh/hook`) are disabled. Templates that reference `lookup` of cluster state will get the empty-result behavior Helm uses in client-only mode. If a chart genuinely requires the cluster to render correctly, `render` will be misleading — but the same is true of `helm template`.
+- **Values precedence matches `helm`, not Flux's `defaults` / `overrides` knobs.** `render` does not implement the `valuesKey: <key>` + `optional` + `targetPath: <jsonpath>` combination from Flux's HelmRelease spec — `targetPath` (which writes a single value into a deep path) is ignored. The other fields are honored.
+- **Chart caching is shared with the user's Helm CLI.** `render` writes into `$XDG_CACHE_HOME/helm/repository/` (or `~/.cache/helm/repository/`). A `helm repo update` you ran earlier helps populate that cache; a stale cache can hide a yanked version.
+- **OCI registries with private auth.** `render` reuses the credentials in `$HELM_REGISTRY_CONFIG` (default `~/.config/helm/registry/config.json`). If you `helm registry login` first, `render` will pick it up. There is no flag for inline credentials.
 - **Default `kubeVersion` is `v1.30.0`** — newer than Helm's own default of `v1.20.0`, because most modern charts refuse to render against 1.20. Override with `--kube-version` if you need a different target.
 
 ## Gotchas
@@ -142,7 +142,7 @@ flaxx show production myapp \
 - **An app with multiple HelmReleases without `--helm`** renders all of them concatenated. That's usually fine for grep-ing and for diffing, but if you wanted just one, pass `--helm <chart>`.
 - **`--values-only` ignores `--skip-crds`** — CRDs aren't part of the values map, so the flag has no effect there.
 - **`spec.valuesFrom` referencing a sealed Secret** (`SealedSecret` / `bitnami-labs/sealed-secrets`) cannot be decrypted offline. The lookup will fail unless the underlying `Secret` has been materialized into the namespace directory next to the sealed copy.
-- **Charts that pull subchart dependencies from a private repository** need `helm dependency update` to have been run for the chart to be cacheable. `show` does not run `dependency update` for you — pre-warm with the Helm CLI if needed.
+- **Charts that pull subchart dependencies from a private repository** need `helm dependency update` to have been run for the chart to be cacheable. `render` does not run `dependency update` for you — pre-warm with the Helm CLI if needed.
 
 ## See also
 
