@@ -346,6 +346,7 @@ Commands:
   update <cluster> <app>      Update Helm version or container image
   check <cluster> [<app>]     Check for newer versions (use --all for all apps)
   render <cluster> <app>      Render the manifests a HelmRelease would produce
+  values <cluster> <app>      Print the default values.yaml of an app's chart
   inspect                     Analyze the repository structure
   config show                 Preview detected configuration
   config init                 Generate .flaxx.yaml from detected structure

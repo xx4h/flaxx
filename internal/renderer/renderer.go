@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"helm.sh/helm/v3/pkg/action"
+	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/cli"
@@ -102,19 +103,6 @@ func Render(ctx context.Context, opts Options) (*Result, error) {
 		return nil, err
 	}
 
-	actionConfig := new(action.Configuration)
-	if isOCI(opts.Info) {
-		regClient, regErr := registry.NewClient(
-			registry.ClientOptDebug(false),
-			registry.ClientOptWriter(io.Discard),
-			registry.ClientOptCredentialsFile(settings.RegistryConfig),
-		)
-		if regErr != nil {
-			return nil, fmt.Errorf("creating registry client: %w", regErr)
-		}
-		actionConfig.RegistryClient = regClient
-	}
-
 	kubeVersion := opts.KubeVersion
 	if kubeVersion == "" {
 		kubeVersion = DefaultKubeVersion
@@ -124,33 +112,19 @@ func Render(ctx context.Context, opts Options) (*Result, error) {
 		return nil, fmt.Errorf("parsing kube version %q: %w", kubeVersion, err)
 	}
 
-	inst := action.NewInstall(actionConfig)
-	inst.DryRun = true
-	inst.Replace = true
-	inst.ClientOnly = true
+	inst, err := newInstall(opts.Info, settings)
+	if err != nil {
+		return nil, err
+	}
 	inst.IncludeCRDs = opts.IncludeCRDs
-	inst.DisableHooks = true
 	inst.Namespace = resolveNamespace(opts)
 	inst.ReleaseName = resolveReleaseName(opts)
-	inst.Version = opts.Info.CurrentVersion
 	inst.KubeVersion = parsedKV
 	inst.APIVersions = append(inst.APIVersions, opts.APIVersions...)
 
-	chartRef := opts.Info.ChartName
-	if isOCI(opts.Info) {
-		chartRef = strings.TrimSuffix(opts.Info.RepoURL, "/") + "/" + opts.Info.ChartName
-	} else {
-		inst.RepoURL = opts.Info.RepoURL
-	}
-
-	chartPath, err := inst.LocateChart(chartRef, settings)
+	ch, err := loadChart(inst, opts.Info, settings)
 	if err != nil {
-		return nil, fmt.Errorf("locating chart %s: %w", chartRef, err)
-	}
-
-	ch, err := loader.Load(chartPath)
-	if err != nil {
-		return nil, fmt.Errorf("loading chart %s: %w", chartPath, err)
+		return nil, err
 	}
 
 	rel, err := inst.RunWithContext(ctx, ch, mergedValues)
@@ -162,6 +136,81 @@ func Render(ctx context.Context, opts Options) (*Result, error) {
 		Manifest:    rel.Manifest,
 		MergedValue: mergedValues,
 	}, nil
+}
+
+// Values pulls the chart referenced by info and returns its raw default
+// values.yaml as authored by the chart maintainer (comments preserved).
+// info.CurrentVersion picks the version; an empty string fetches the
+// latest, matching how Helm's CLI resolves an unpinned chart reference.
+func Values(info checker.HelmInfo) (string, error) {
+	if info.ChartName == "" {
+		return "", fmt.Errorf("HelmRelease %q has no chart name", info.Name)
+	}
+	if info.RepoURL == "" {
+		return "", fmt.Errorf("HelmRelease %q has no resolved HelmRepository URL", info.Name)
+	}
+
+	settings := cli.New()
+	inst, err := newInstall(info, settings)
+	if err != nil {
+		return "", err
+	}
+
+	ch, err := loadChart(inst, info, settings)
+	if err != nil {
+		return "", err
+	}
+
+	for _, f := range ch.Raw {
+		if f.Name == chartutil.ValuesfileName {
+			return string(f.Data), nil
+		}
+	}
+	return "", nil
+}
+
+// newInstall builds a client-only Install action configured to pull the
+// chart referenced by info. Callers further customize before rendering.
+func newInstall(info checker.HelmInfo, settings *cli.EnvSettings) (*action.Install, error) {
+	actionConfig := new(action.Configuration)
+	if isOCI(info) {
+		regClient, err := registry.NewClient(
+			registry.ClientOptDebug(false),
+			registry.ClientOptWriter(io.Discard),
+			registry.ClientOptCredentialsFile(settings.RegistryConfig),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("creating registry client: %w", err)
+		}
+		actionConfig.RegistryClient = regClient
+	}
+
+	inst := action.NewInstall(actionConfig)
+	inst.DryRun = true
+	inst.Replace = true
+	inst.ClientOnly = true
+	inst.DisableHooks = true
+	inst.Version = info.CurrentVersion
+	if !isOCI(info) {
+		inst.RepoURL = info.RepoURL
+	}
+	return inst, nil
+}
+
+func loadChart(inst *action.Install, info checker.HelmInfo, settings *cli.EnvSettings) (*chart.Chart, error) {
+	chartRef := info.ChartName
+	if isOCI(info) {
+		chartRef = strings.TrimSuffix(info.RepoURL, "/") + "/" + info.ChartName
+	}
+	chartPath, err := inst.LocateChart(chartRef, settings)
+	if err != nil {
+		return nil, fmt.Errorf("locating chart %s: %w", chartRef, err)
+	}
+	ch, err := loader.Load(chartPath)
+	if err != nil {
+		return nil, fmt.Errorf("loading chart %s: %w", chartPath, err)
+	}
+	return ch, nil
 }
 
 func buildValues(opts Options, settings *cli.EnvSettings, out io.Writer) (map[string]any, error) {

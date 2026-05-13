@@ -26,6 +26,7 @@ Per-command pages, one per subcommand — purpose, flags, examples, gotchas.
 - [`flaxx update`](./commands/update.md) — bump a Helm chart version or container image
 - [`flaxx check`](./commands/check.md) — query upstreams for newer versions
 - [`flaxx render`](./commands/render.md) — render the manifests a HelmRelease would produce
+- [`flaxx values`](./commands/values.md) — print the default values.yaml of an app's chart
 - [`flaxx inspect`](./commands/inspect.md) — describe what flaxx sees in the current repository
 - [`flaxx config`](./commands/config.md) — show or initialize `.flaxx.yaml`
 - [`flaxx template`](./commands/template.md) — list / initialize / extract extras
