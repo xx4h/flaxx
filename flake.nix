@@ -41,6 +41,8 @@
 
         env.CGO_ENABLED = 0;
 
+        nativeBuildInputs = [ pkgs.installShellFiles ];
+
         ldflags = [
           "-s"
           "-w"
@@ -48,6 +50,14 @@
           "-X github.com/xx4h/flaxx/cmd.commit=${commit}"
           "-X github.com/xx4h/flaxx/cmd.date=${date}"
         ];
+
+        postInstall = pkgs.lib.optionalString
+          (pkgs.stdenv.buildPlatform.canExecute pkgs.stdenv.hostPlatform) ''
+          installShellCompletion --cmd flaxx \
+            --bash <($out/bin/flaxx completion bash) \
+            --zsh  <($out/bin/flaxx completion zsh) \
+            --fish <($out/bin/flaxx completion fish)
+        '';
 
         meta = with pkgs.lib; {
           description = "Generic scaffolding and maintenance tool for FluxCD GitOps repositories";
@@ -62,6 +72,9 @@
       overlays.default = final: prev: {
         flaxx = mkFlaxx final;
       };
+
+      homeManagerModules.default = import ./nix/hm-module.nix self;
+      homeManagerModules.flaxx = self.homeManagerModules.default;
     }
     //
     flake-utils.lib.eachDefaultSystem (system:
