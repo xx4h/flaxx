@@ -142,7 +142,7 @@ flaxx check production --all
 flaxx update production myapp --helm-version 2.0.0
 
 # Render the manifests a HelmRelease will produce (preview before committing)
-flaxx show production myapp
+flaxx render production myapp
 
 # Inspect the repository structure
 flaxx inspect
@@ -257,23 +257,23 @@ Shell completions for `--helm-version` and `--image` query upstream registries f
 
 ## Rendering HelmRelease output
 
-`flaxx show` runs the same template engine `helm template` uses, but driven by the HelmRelease in your repository — pulling the pinned chart version, resolving `spec.values` and `spec.valuesFrom` (sibling ConfigMaps/Secrets), and printing the rendered Kubernetes manifests:
+`flaxx render` runs the same template engine `helm template` uses, but driven by the HelmRelease in your repository — pulling the pinned chart version, resolving `spec.values` and `spec.valuesFrom` (sibling ConfigMaps/Secrets), and printing the rendered Kubernetes manifests:
 
 ```bash
 # Render the manifests for an app
-flaxx show production myapp
+flaxx render production myapp
 
 # Layer a CLI override on top of the HelmRelease values
-flaxx show production myapp -f override.yaml --set image.tag=v2
+flaxx render production myapp -f override.yaml --set image.tag=v2
 
 # Pick one HelmRelease when an app declares several
-flaxx show production monitoring --helm grafana
+flaxx render production monitoring --helm grafana
 
 # Inspect just the merged values that would be passed to the chart
-flaxx show production myapp --values-only
+flaxx render production myapp --values-only
 ```
 
-Useful for previewing a chart's defaults, sanity-checking what a value override will do before committing it, or diffing the desired manifests against what's running. See [`docs/commands/show.md`](./docs/commands/show.md) for every flag.
+Useful for previewing a chart's defaults, sanity-checking what a value override will do before committing it, or diffing the desired manifests against what's running. See [`docs/commands/render.md`](./docs/commands/render.md) for every flag.
 
 ## Custom Templates (Extras)
 
@@ -345,7 +345,7 @@ Commands:
   add <cluster> <app>         Add extras to an existing app
   update <cluster> <app>      Update Helm version or container image
   check <cluster> [<app>]     Check for newer versions (use --all for all apps)
-  show <cluster> <app>        Render the manifests a HelmRelease would produce
+  render <cluster> <app>      Render the manifests a HelmRelease would produce
   inspect                     Analyze the repository structure
   config show                 Preview detected configuration
   config init                 Generate .flaxx.yaml from detected structure

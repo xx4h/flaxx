@@ -16,20 +16,20 @@ import (
 )
 
 var (
-	showNamespace   string
-	showHelm        string
-	showReleaseName string
-	showValues      []string
-	showSet         []string
-	showSetString   []string
-	showSkipCRDs    bool
-	showValuesOnly  bool
-	showKubeVersion string
-	showAPIVersions []string
+	renderNamespace   string
+	renderHelm        string
+	renderReleaseName string
+	renderValues      []string
+	renderSet         []string
+	renderSetString   []string
+	renderSkipCRDs    bool
+	renderValuesOnly  bool
+	renderKubeVersion string
+	renderAPIVersions []string
 )
 
-var showCmd = &cobra.Command{
-	Use:   "show <cluster> <app>",
+var renderCmd = &cobra.Command{
+	Use:   "render <cluster> <app>",
 	Short: "Render the manifests a HelmRelease would produce",
 	Long: `Render the Kubernetes manifests for an app's HelmRelease, using the
 chart, version, and values declared in the Flux files.
@@ -42,37 +42,37 @@ supplied via --values / --set / --set-string are layered in that order.
 
 Examples:
   # Render the manifests for an app
-  flaxx show k8s myapp
+  flaxx render k8s myapp
 
   # Override values at the CLI like helm template
-  flaxx show k8s myapp -f override.yaml --set image.tag=v2
+  flaxx render k8s myapp -f override.yaml --set image.tag=v2
 
   # Pick one HelmRelease when an app has several
-  flaxx show k8s monitoring --helm grafana
+  flaxx render k8s monitoring --helm grafana
 
   # Inspect just the merged values that would be passed to the chart
-  flaxx show k8s myapp --values-only`,
+  flaxx render k8s myapp --values-only`,
 	Args:              cobra.ExactArgs(2),
-	RunE:              runShow,
+	RunE:              runRender,
 	ValidArgsFunction: completeClusterAndApp,
 }
 
 func init() {
-	showCmd.Flags().StringVarP(&showNamespace, "namespace", "n", "", "override release namespace (default: HelmRelease namespace)")
-	showCmd.Flags().StringVar(&showHelm, "helm", "", "render only the HelmRelease whose chart matches this name")
-	showCmd.Flags().StringVar(&showReleaseName, "release-name", "", "override release name (default: HelmRelease metadata.name)")
-	showCmd.Flags().StringSliceVarP(&showValues, "values", "f", nil, "values file(s) merged on top of the HelmRelease values (repeatable)")
-	showCmd.Flags().StringSliceVar(&showSet, "set", nil, "set values on the command line (repeatable)")
-	showCmd.Flags().StringSliceVar(&showSetString, "set-string", nil, "set string values on the command line (repeatable)")
-	showCmd.Flags().BoolVar(&showSkipCRDs, "skip-crds", false, "do not include CRDs from the chart")
-	showCmd.Flags().BoolVar(&showValuesOnly, "values-only", false, "print the merged values instead of rendered manifests")
-	showCmd.Flags().StringVar(&showKubeVersion, "kube-version", "", "Kubernetes version reported to the chart (default: "+renderer.DefaultKubeVersion+")")
-	showCmd.Flags().StringSliceVar(&showAPIVersions, "api-versions", nil, "extra API versions advertised to the chart (repeatable)")
+	renderCmd.Flags().StringVarP(&renderNamespace, "namespace", "n", "", "override release namespace (default: HelmRelease namespace)")
+	renderCmd.Flags().StringVar(&renderHelm, "helm", "", "render only the HelmRelease whose chart matches this name")
+	renderCmd.Flags().StringVar(&renderReleaseName, "release-name", "", "override release name (default: HelmRelease metadata.name)")
+	renderCmd.Flags().StringSliceVarP(&renderValues, "values", "f", nil, "values file(s) merged on top of the HelmRelease values (repeatable)")
+	renderCmd.Flags().StringSliceVar(&renderSet, "set", nil, "set values on the command line (repeatable)")
+	renderCmd.Flags().StringSliceVar(&renderSetString, "set-string", nil, "set string values on the command line (repeatable)")
+	renderCmd.Flags().BoolVar(&renderSkipCRDs, "skip-crds", false, "do not include CRDs from the chart")
+	renderCmd.Flags().BoolVar(&renderValuesOnly, "values-only", false, "print the merged values instead of rendered manifests")
+	renderCmd.Flags().StringVar(&renderKubeVersion, "kube-version", "", "Kubernetes version reported to the chart (default: "+renderer.DefaultKubeVersion+")")
+	renderCmd.Flags().StringSliceVar(&renderAPIVersions, "api-versions", nil, "extra API versions advertised to the chart (repeatable)")
 
-	rootCmd.AddCommand(showCmd)
+	rootCmd.AddCommand(renderCmd)
 }
 
-func runShow(cmd *cobra.Command, args []string) error {
+func runRender(cmd *cobra.Command, args []string) error {
 	cluster := args[0]
 	app := args[1]
 
@@ -81,12 +81,12 @@ func runShow(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting working directory: %w", err)
 	}
 
-	cfg, err := loadShowConfig(cwd)
+	cfg, err := loadRenderConfig(cwd)
 	if err != nil {
 		return err
 	}
 
-	ns := showNamespace
+	ns := renderNamespace
 	if ns == "" {
 		ns = app
 	}
@@ -113,7 +113,7 @@ func runShow(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no HelmRelease found for app %q in cluster %q", app, cluster)
 	}
 
-	selected, err := selectHelmRelease(helmInfos, showHelm)
+	selected, err := selectHelmRelease(helmInfos, renderHelm)
 	if err != nil {
 		return err
 	}
@@ -130,7 +130,7 @@ func runShow(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func loadShowConfig(cwd string) (config.Config, error) {
+func loadRenderConfig(cwd string) (config.Config, error) {
 	if cfgFile != "" {
 		cfg, err := config.Load(cfgFile)
 		if err != nil {
@@ -175,15 +175,15 @@ func renderOne(ctx context.Context, info checker.HelmInfo, appNamespacesDir stri
 
 	opts := renderer.Options{
 		Info:         info,
-		Namespace:    showNamespace,
-		ReleaseName:  showReleaseName,
+		Namespace:    renderNamespace,
+		ReleaseName:  renderReleaseName,
 		SearchDirs:   []string{appNamespacesDir},
-		ValueFiles:   showValues,
-		SetValues:    showSet,
-		StringValues: showSetString,
-		IncludeCRDs:  !showSkipCRDs,
-		KubeVersion:  showKubeVersion,
-		APIVersions:  showAPIVersions,
+		ValueFiles:   renderValues,
+		SetValues:    renderSet,
+		StringValues: renderSetString,
+		IncludeCRDs:  !renderSkipCRDs,
+		KubeVersion:  renderKubeVersion,
+		APIVersions:  renderAPIVersions,
 		Out:          os.Stderr,
 	}
 
@@ -192,7 +192,7 @@ func renderOne(ctx context.Context, info checker.HelmInfo, appNamespacesDir stri
 		return err
 	}
 
-	if showValuesOnly {
+	if renderValuesOnly {
 		return printMergedValues(res.MergedValue)
 	}
 

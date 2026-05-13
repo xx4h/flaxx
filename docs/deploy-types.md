@@ -164,4 +164,4 @@ Mixing types across a single cluster is fine — flaxx's `kustomization.yaml` in
 - [commands/generate.md](./commands/generate.md) — every `generate` flag
 - [configuration.md](./configuration.md#two-common-layout-presets) — how path templating and flat-vs-subdirs interact with each type
 - [commands/check.md](./commands/check.md) / [commands/update.md](./commands/update.md) — maintenance for scaffolded apps
-- [commands/show.md](./commands/show.md) — render the manifests a `core-helm` / `ext-helm` / `ext-oci` HelmRelease would produce
+- [commands/render.md](./commands/render.md) — render the manifests a `core-helm` / `ext-helm` / `ext-oci` HelmRelease would produce
