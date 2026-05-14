@@ -54,7 +54,7 @@ Examples:
   flaxx render k8s myapp --values-only`,
 	Args:              cobra.ExactArgs(2),
 	RunE:              runRender,
-	ValidArgsFunction: completeClusterAndApp,
+	ValidArgsFunction: completeClusterAndHelmApp,
 }
 
 func init() {
