@@ -70,6 +70,64 @@ func completeClusters(toComplete string) ([]string, cobra.ShellCompDirective) {
 	return clusters, cobra.ShellCompDirectiveNoFileComp
 }
 
+// completeClusterAndHelmApp is like completeClusterAndApp but restricts the
+// app list to those that actually carry at least one HelmRelease — used by
+// commands that only make sense for chart-backed apps (e.g. `values`).
+func completeClusterAndHelmApp(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	switch len(args) {
+	case 0:
+		return completeClusters(toComplete)
+	case 1:
+		return completeHelmApps(args[0], toComplete)
+	default:
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+}
+
+// completeHelmApps lists apps that have at least one HelmRelease declared in
+// their cluster directory. Apps without a HelmRelease are skipped silently.
+func completeHelmApps(cluster, toComplete string) ([]string, cobra.ShellCompDirective) {
+	cwd, cfg, err := loadCompletionConfig()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+
+	genOpts := generator.Options{App: "_", Cluster: cluster, Namespace: "_"}
+	namespacesDir, err := generator.ResolvePath(cfg.Paths.NamespacesDir, genOpts)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+	clusterDir, err := generator.ResolvePath(cfg.Paths.ClusterDir, genOpts)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+
+	entries, err := os.ReadDir(filepath.Join(cwd, namespacesDir))
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+
+	clusterRoot := filepath.Join(cwd, clusterDir)
+	var apps []string
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !strings.HasPrefix(name, toComplete) {
+			continue
+		}
+		appClusterDir := generator.ResolveAppClusterDir(clusterRoot, name, cfg.Paths.ClusterSubdirs)
+		helmInfos, scanErr := checker.ScanAllHelm(appClusterDir, generator.AppFilter(name, cfg.Paths.ClusterSubdirs))
+		if scanErr != nil || len(helmInfos) == 0 {
+			continue
+		}
+		apps = append(apps, name)
+	}
+
+	return apps, cobra.ShellCompDirectiveNoFileComp
+}
+
 // completeApps lists app names by scanning the namespaces directory
 // (always has per-app subdirectories regardless of cluster dir layout).
 func completeApps(cluster, toComplete string) ([]string, cobra.ShellCompDirective) {
